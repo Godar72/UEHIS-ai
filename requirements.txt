@@ -1,0 +1,8 @@
+earthengine-api
+geemap
+osmnx
+geopandas
+shapely
+fastapi
+uvicorn
+python-dotenv
