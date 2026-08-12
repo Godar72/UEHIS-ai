@@ -6,3 +6,10 @@ shapely
 fastapi
 uvicorn
 python-dotenv
+torch
+rasterio
+numpy
+scipy
+sqlalchemy
+geoalchemy2
+psycopg2-binary

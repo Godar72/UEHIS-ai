@@ -1,9 +1,9 @@
 venv/
-.env
+.venv/
 __pycache__/
 *.pyc
-*.tif
-*.tiff
-outputs/
-cache/
+.env
+.git/
 .pytest_cache/
+*.tif
+output/

@@ -1,0 +1,45 @@
+{
+    "description": "UEHI scoring factor weights and directions.",
+    "factors": {
+        "ndvi": {
+            "weight": 0.20,
+            "direction": "positive",
+            "label": "NDVI (Vegetation Index)"
+        },
+        "tree_density": {
+            "weight": 0.10,
+            "direction": "positive",
+            "label": "Tree Canopy Density"
+        },
+        "biodiversity": {
+            "weight": 0.10,
+            "direction": "positive",
+            "label": "Biodiversity Index"
+        },
+        "aqi": {
+            "weight": 0.15,
+            "direction": "negative",
+            "label": "Air Quality Index"
+        },
+        "temperature": {
+            "weight": 0.15,
+            "direction": "negative",
+            "label": "Land Surface Temperature"
+        },
+        "impervious_surfaces": {
+            "weight": 0.15,
+            "direction": "negative",
+            "label": "Impervious Surface Fraction"
+        },
+        "water_availability": {
+            "weight": 0.05,
+            "direction": "positive",
+            "label": "Water Body Availability"
+        },
+        "population_exposure": {
+            "weight": 0.10,
+            "direction": "negative",
+            "label": "Population Heat Exposure"
+        }
+    }
+}
