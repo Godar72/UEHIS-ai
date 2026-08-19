@@ -1,4 +1,4 @@
-# UEHIS — Urban Eco-Heat Island Scoring System
+# UEHIS — AI-Based Urban Ecosystem Health Intelligence System
 
 A geospatial analytics platform that quantifies urban heat island intensity, identifies ecological vulnerabilities, and recommends carbon-sink interventions using satellite imagery and 3D urban morphology data.
 
