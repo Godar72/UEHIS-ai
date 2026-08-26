@@ -1,4 +1,4 @@
-# UEHIS — Urban Eco-Heat Island Scoring System
+# UEHIS — AI-Based Urban Ecosystem Health Intelligence System
 
 A geospatial analytics platform that quantifies urban heat island intensity, identifies ecological vulnerabilities, and recommends carbon-sink interventions using satellite imagery and 3D urban morphology data.
 
@@ -79,19 +79,16 @@ uvicorn api.main:app --reload
 ---
 
 ## Project Structure
-
-```
 UEHIS/
-├── data_ingestion/      # Phase 1 — Satellite & weather data retrieval
-├── feature_engineering/  # Phase 2 — Segmentation & feature extraction
-├── scoring/             # Phase 3 — 3D UEHI score computation
-├── carbon_sink/         # Phase 4 — Green infrastructure planning
-├── api/                 # Phase 5 — FastAPI REST endpoints
-├── dashboard/           # Phase 5 — Interactive map UI
+├── data_ingestion/ # Phase 1 — Satellite & weather data retrieval
+├── feature_engineering/ # Phase 2 — Segmentation & feature extraction
+├── scoring/ # Phase 3 — 3D UEHI score computation
+├── carbon_sink/ # Phase 4 — Green infrastructure planning
+├── api/ # Phase 5 — FastAPI REST endpoints
+├── dashboard/ # Phase 5 — Interactive map UI
 ├── requirements.txt
 ├── .env.example
 └── README.md
-```
 
 ---
 

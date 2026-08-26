@@ -1,5 +1,11 @@
-﻿venv/
+venv/
 .env
 __pycache__/
 *.pyc
 .DS_Store
+*.tif
+*.tiff
+outputs/
+cache/
+.pytest_cache/
+*.pdf
