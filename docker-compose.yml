@@ -1,0 +1,46 @@
+# ──────────────────────────────────────────────────────────────
+# UEHIS — docker-compose.yml
+# Services: FastAPI app + PostgreSQL/PostGIS
+# ──────────────────────────────────────────────────────────────
+version: "3.9"
+
+services:
+  # ── PostGIS database ──────────────────────────────────────
+  db:
+    image: postgis/postgis:16-3.5
+    container_name: uehis-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-uehis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uehis}
+      POSTGRES_DB: ${POSTGRES_DB:-uehis}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uehis"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI application ───────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uehis-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-uehis}:${POSTGRES_PASSWORD:-uehis}@db:5432/${POSTGRES_DB:-uehis}
+      GEE_PROJECT_ID: ${GEE_PROJECT_ID:-}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
+    driver: local
