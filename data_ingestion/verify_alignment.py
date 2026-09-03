@@ -1,7 +1,7 @@
 import rasterio
 
-sentinel_path = 'kothrud_pune_composite.tif'  
-label_path = 'kothrud_dynamicworld_labels_2026.tif'
+sentinel_path = 'pune_city_composite_2026.tif'
+label_path = 'pune_dynamicworld_labels_4class_2026.tif'
 
 with rasterio.open(sentinel_path) as s2, rasterio.open(label_path) as labels:
     print("--- Sentinel-2 composite ---")
@@ -9,7 +9,7 @@ with rasterio.open(sentinel_path) as s2, rasterio.open(label_path) as labels:
     print("Bounds:", s2.bounds)
     print("CRS:", s2.crs)
 
-    print("\n--- Dynamic World labels ---")
+    print("\n--- Dynamic World 4-class labels ---")
     print("Width x Height:", labels.width, "x", labels.height)
     print("Bounds:", labels.bounds)
     print("CRS:", labels.crs)

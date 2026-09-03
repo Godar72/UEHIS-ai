@@ -9,11 +9,16 @@ Expected data layout
 ├── images/          # multi-band GeoTIFF patches  (e.g. 256×256, 4 bands)
 │   ├── tile_001.tif
 │   └── ...
-└── masks/           # single-band uint8 GeoTIFFs  (class IDs: 0, 1, 2)
-    ├── tile_001.tif
+└── masks/           # single-band uint8 GeoTIFFs
+    ├── tile_001.tif  # raw class IDs: 0=nodata, 1=canopy, 2=impervious, 3=pervious, 4=water
     └── ...
 
 Image and mask filenames must match.
+
+Note: raw mask values (0-4) are remapped internally to contiguous
+0-indexed classes (canopy=0, impervious=1, pervious=2, water=3), with
+nodata (raw 0) mapped to ignore_index=255 so it's excluded from loss
+and accuracy calculations entirely.
 """
 
 import os
@@ -30,6 +35,25 @@ from feature_engineering.unet import UNet, NUM_CLASSES
 
 
 # ---------------------------------------------------------------------------
+# Label remapping
+# ---------------------------------------------------------------------------
+
+# Raw label values in the exported GeoTIFFs -> contiguous training classes.
+# Raw 0 (nodata) is mapped to IGNORE_INDEX so it never contributes to loss
+# or accuracy — it is not a real land-cover class.
+IGNORE_INDEX = 255
+RAW_TO_TRAIN = {0: IGNORE_INDEX, 1: 0, 2: 1, 3: 2, 4: 3}
+
+
+def remap_mask(mask: np.ndarray) -> np.ndarray:
+    """Remap raw exported label values to contiguous training class IDs."""
+    remapped = np.full_like(mask, IGNORE_INDEX)
+    for raw_val, train_val in RAW_TO_TRAIN.items():
+        remapped[mask == raw_val] = train_val
+    return remapped
+
+
+# ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
 
@@ -42,7 +66,7 @@ class PatchDataset(Dataset):
     images_dir : str | Path
         Directory of multi-band GeoTIFF image patches.
     masks_dir : str | Path
-        Directory of single-band uint8 mask patches (class IDs).
+        Directory of single-band uint8 mask patches (raw class IDs).
     """
 
     def __init__(self, images_dir: str | Path, masks_dir: str | Path):
@@ -69,9 +93,14 @@ class PatchDataset(Dataset):
         with rasterio.open(self.images_dir / name) as src:
             image = src.read().astype(np.float32)
 
-        # Read mask — shape (H, W), int64
+        # Read mask — shape (H, W), raw class IDs (0-4)
         with rasterio.open(self.masks_dir / name) as src:
             mask = src.read(1).astype(np.int64)
+
+        # Remap raw values (0=nodata,1=canopy,2=impervious,3=pervious,4=water)
+        # to contiguous training classes (canopy=0,impervious=1,pervious=2,
+        # water=3), with nodata sent to IGNORE_INDEX.
+        mask = remap_mask(mask)
 
         # Simple normalisation: per-band min-max to [0, 1]
         for b in range(image.shape[0]):
@@ -81,6 +110,30 @@ class PatchDataset(Dataset):
                 image[b] = (band - bmin) / (bmax - bmin)
 
         return torch.from_numpy(image), torch.from_numpy(mask)
+
+
+# ---------------------------------------------------------------------------
+# Class weights (computed from actual pixel counts across the dataset)
+# ---------------------------------------------------------------------------
+
+def compute_class_weights(class_pixel_counts: dict[int, int], device: str) -> torch.Tensor:
+    """
+    Inverse-frequency class weights, ordered by training class index
+    (0=canopy, 1=impervious, 2=pervious, 3=water).
+
+    Parameters
+    ----------
+    class_pixel_counts : dict[int, int]
+        Mapping of training class index -> total pixel count across the dataset.
+    device : str
+        Device to place the resulting tensor on.
+    """
+    counts = torch.tensor(
+        [class_pixel_counts[i] for i in range(len(class_pixel_counts))],
+        dtype=torch.float32,
+    )
+    weights = counts.sum() / (len(counts) * counts)
+    return weights.to(device)
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +190,21 @@ def train_model(
 
     # ── Model ───────────────────────────────────────────────────────────
     model = UNet(in_channels=in_channels, num_classes=NUM_CLASSES).to(device)
-    criterion = nn.CrossEntropyLoss()
+
+    # Class weights computed from actual pixel counts across the full
+    # patches_4class dataset (canopy, impervious, pervious, water).
+    # Update these numbers if you regenerate patches with different counts.
+    class_pixel_counts = {
+        0: 1_131_134,   # canopy
+        1: 8_435_941,   # impervious
+        2: 1_281_386,   # pervious
+        3: 181_948,     # water
+    }
+    class_weights = compute_class_weights(class_pixel_counts, device)
+    print(f"[Train] Class weights (canopy, impervious, pervious, water): "
+          f"{class_weights.tolist()}")
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=IGNORE_INDEX)
     optimiser = torch.optim.Adam(model.parameters(), lr=lr)
 
     best_val_loss = float("inf")
@@ -176,8 +243,9 @@ def train_model(
                 val_loss += criterion(logits, masks).item() * images.size(0)
 
                 preds = logits.argmax(dim=1)
-                correct += (preds == masks).sum().item()
-                total += masks.numel()
+                valid = masks != IGNORE_INDEX
+                correct += (preds[valid] == masks[valid]).sum().item()
+                total += valid.sum().item()
 
         val_loss /= n_val
         val_acc = correct / total if total > 0 else 0.0

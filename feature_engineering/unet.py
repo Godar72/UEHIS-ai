@@ -69,7 +69,7 @@ class _UpBlock(nn.Module):
 # ---------------------------------------------------------------------------
 
 # Class labels used throughout the project
-CLASS_NAMES = {0: "canopy", 1: "impervious", 2: "pervious"}
+CLASS_NAMES = {0: "canopy", 1: "impervious", 2: "pervious", 3: "water"}
 NUM_CLASSES = len(CLASS_NAMES)
 
 
