@@ -5,14 +5,13 @@ import os
 
 image_path = 'pune_city_composite_2026.tif'
 label_path = 'pune_dynamicworld_labels_4class_2026.tif'  # updated to 4-class version
-
-image_out_dir = 'patches_4class/images'
-mask_out_dir = 'patches_4class/masks'
+image_out_dir = 'patches_4class_dense/images'
+mask_out_dir = 'patches_4class_dense/masks'
 os.makedirs(image_out_dir, exist_ok=True)
 os.makedirs(mask_out_dir, exist_ok=True)
 
 patch_size = 256
-stride = 128  # 50% overlap between adjacent patches instead of jumping a full 256px
+stride = 64  # 75% overlap between adjacent patches instead of jumping a full 256px
 saved_count = 0
 skipped_count = 0
 

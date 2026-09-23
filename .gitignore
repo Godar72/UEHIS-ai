@@ -9,3 +9,6 @@ outputs/
 cache/
 .pytest_cache/
 *.pdf
+patches_4class.zip
+patches_4class_dense.zip
+patches_4class_spatial.zip
