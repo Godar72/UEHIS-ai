@@ -21,12 +21,23 @@ from feature_engineering.unet import UNet, NUM_CLASSES, CLASS_NAMES
 # ---------------------------------------------------------------------------
 
 def _normalise_tile(tile: np.ndarray) -> np.ndarray:
-    """Per-band min-max normalisation to [0, 1]."""
+    """Per-band min-max normalisation to [0, 1] for raw bands, fixed range for NDVI/slope."""
     out = tile.copy().astype(np.float32)
+    
+    NDVI_BAND_INDEX = 3
+    SLOPE_BAND_INDEX = 4
+    SLOPE_MAX_DEGREES = 90.0
+    
     for b in range(out.shape[0]):
-        bmin, bmax = out[b].min(), out[b].max()
-        if bmax - bmin > 0:
-            out[b] = (out[b] - bmin) / (bmax - bmin)
+        if b == NDVI_BAND_INDEX:
+            out[b] = np.clip((out[b] + 1.0) / 2.0, 0.0, 1.0)
+        elif b == SLOPE_BAND_INDEX:
+            out[b] = np.clip(out[b] / SLOPE_MAX_DEGREES, 0.0, 1.0)
+        else:
+            bmin, bmax = out[b].min(), out[b].max()
+            if bmax - bmin > 0:
+                out[b] = (out[b] - bmin) / (bmax - bmin)
+                
     return out
 
 

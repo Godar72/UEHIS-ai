@@ -1,45 +1,61 @@
 {
-    "description": "UEHI scoring factor weights and directions.",
+    "description": "UEHI scoring factor directions (6-factor model). The six factors and their directions are authoritative. The numerical config weights provided here are baseline/default/reference values only. Production UEHI runs do NOT use them and instead calculate entropy-derived weights dynamically from the actual factor matrix. water_availability formally investigated and excluded for Kothrud pilot.",
     "factors": {
         "ndvi": {
-            "weight": 0.20,
+            "weight": 0.22,
             "direction": "positive",
             "label": "NDVI (Vegetation Index)"
         },
         "tree_density": {
-            "weight": 0.10,
+            "weight": 0.14,
             "direction": "positive",
             "label": "Tree Canopy Density"
         },
-        "biodiversity": {
-            "weight": 0.10,
-            "direction": "positive",
-            "label": "Biodiversity Index"
-        },
-        "aqi": {
-            "weight": 0.15,
+        "pm25": {
+            "weight": 0.17,
             "direction": "negative",
-            "label": "Air Quality Index"
+            "label": "PM2.5 Concentration (ug/m3)",
+            "source": "ACAG_V6GL03_SatPM25",
+            "metric": "seasonal_mean_pm25_ugm3",
+            "scale": "ug/m3",
+            "native_resolution": "0.01 degrees",
+            "output_resolution": "250m_resampled_bilinear",
+            "temporal_window": "2024-01_to_2024-03",
+            "temporal_design": "seasonal_mean_jan_feb_mar_strict",
+            "reference": "van Donkelaar et al., ACAG V6",
+            "access_method": "GEE_community_catalog_or_NetCDF_download",
+            "missing_data_policy": "NaN preservation, never replace with zero",
+            "resampling_method": "bilinear"
         },
         "temperature": {
-            "weight": 0.15,
+            "weight": 0.19,
             "direction": "negative",
             "label": "Land Surface Temperature"
         },
         "impervious_surfaces": {
-            "weight": 0.15,
+            "weight": 0.16,
             "direction": "negative",
             "label": "Impervious Surface Fraction"
         },
-        "water_availability": {
-            "weight": 0.05,
-            "direction": "positive",
-            "label": "Water Body Availability"
-        },
         "population_exposure": {
-            "weight": 0.10,
+            "weight": 0.12,
             "direction": "negative",
-            "label": "Population Heat Exposure"
+            "label": "Population Heat Exposure",
+            "role": "base_factor_and_multiplier",
+            "multiplier_formula": "m(i) = 1 - beta * N_positive(Pop_i)",
+            "multiplier_note": "Population exposure participates twice: (1) as a negative-direction factor in the entropy-weighted base score, and (2) as a multiplicative penalty via m(i). The dual-role amplifies public-health urgency for densely populated blocks.",
+            "erratum": "Prior PDF documentation recorded the formula as m(i) = 1 + beta * N(Pop). This is incorrect. The authoritative formula is m(i) = 1 - beta * N_positive(Pop_i). See docs/scoring_methodology.md."
+        }
+    },
+    "excluded_factors": {
+        "water_availability": {
+            "reason": "No reliable block-scale open-water signal detected for Kothrud ROI across evaluated water datasets. Pilot-specific methodological exclusion.",
+            "investigation": "OSM waterway audit: 19 stream LineStrings, ~10km total mapped length, 50/256 blocks intersected, 206/256 blocks zero waterway length, zero-share ~80.5%",
+            "exclusion_type": "pilot_specific_methodological"
+        },
+        "biodiversity": {
+            "reason": "Removed from the authoritative Phase 3 scoring configuration.",
+            "exclusion_type": "pilot_specific_methodological"
         }
     }
 }

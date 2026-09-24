@@ -1,114 +1,250 @@
-"""
-Run U-Net inference on the Kothrud composite with randomly-initialised
-weights (no pretrained checkpoint available yet).
-
-Outputs
--------
-- outputs/kothrud_segmentation.tif  -- single-band uint8 class map
-- outputs/kothrud_segmentation.png  -- side-by-side RGB + classification
-"""
-
 import sys
+import json
+import hashlib
 from pathlib import Path
+from datetime import datetime
 
 import numpy as np
 import rasterio
 import torch
-import matplotlib
-matplotlib.use("Agg")  # headless backend
-import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-from matplotlib.patches import Patch
+import matplotlib.pyplot as plt
 
-# ── project imports ──────────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from feature_engineering.unet import UNet, NUM_CLASSES, CLASS_NAMES
-from feature_engineering.predict import _normalise_tile, _pad_to
+from feature_engineering.predict import _normalise_tile
 
-# ── paths ────────────────────────────────────────────────────────────────
-COMPOSITE = Path("kothrud_pune_composite.tif")
-OUT_DIR   = Path("outputs")
-SEG_TIF   = OUT_DIR / "kothrud_segmentation.tif"
-SEG_PNG   = OUT_DIR / "kothrud_segmentation.png"
-
-PATCH_SIZE = 256
-STRIDE     = 256
-IN_CHANNELS = 4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# ── colour scheme ────────────────────────────────────────────────────────
-CLASS_COLOURS = {
-    0: (34, 139, 34),      # canopy      -> forest green
-    1: (128, 128, 128),    # impervious  -> grey
-    2: (210, 180, 140),    # pervious    -> tan
-}
+PATCH_SIZE = 256
+STRIDE = 128
+MARGIN = 96
+IN_CHANNELS = 5
 
+def apply_tta(x: np.ndarray, idx: int) -> np.ndarray:
+    if idx == 0: return x
+    if idx == 1: return np.flip(x, axis=2)
+    if idx == 2: return np.flip(x, axis=1)
+    if idx == 3: return np.rot90(x, k=1, axes=(1, 2))
+    if idx == 4: return np.rot90(x, k=2, axes=(1, 2))
+    if idx == 5: return np.rot90(x, k=3, axes=(1, 2))
+    if idx == 6: return np.rot90(np.flip(x, axis=2), k=1, axes=(1, 2))
+    if idx == 7: return np.rot90(np.flip(x, axis=1), k=1, axes=(1, 2))
+    return x
 
-def run_inference():
-    """Run sliding-window U-Net inference (random weights)."""
+def inverse_tta(x: np.ndarray, idx: int) -> np.ndarray:
+    if idx == 0: return x
+    if idx == 1: return np.flip(x, axis=2)
+    if idx == 2: return np.flip(x, axis=1)
+    if idx == 3: return np.rot90(x, k=-1, axes=(1, 2))
+    if idx == 4: return np.rot90(x, k=-2, axes=(1, 2))
+    if idx == 5: return np.rot90(x, k=-3, axes=(1, 2))
+    if idx == 6: return np.flip(np.rot90(x, k=-1, axes=(1, 2)), axis=2)
+    if idx == 7: return np.flip(np.rot90(x, k=-1, axes=(1, 2)), axis=1)
+    return x
 
-    # ── 1. Initialise model (random weights) ─────────────────────────────
-    model = UNet(in_channels=IN_CHANNELS, num_classes=NUM_CLASSES).to(DEVICE)
-    model.eval()
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"[Model] UNet initialised with random weights ({total_params:,} params, device={DEVICE})")
-    print(f"[Model] Input channels: {IN_CHANNELS}, Output classes: {NUM_CLASSES}")
-    print(f"[Model] Classes: {CLASS_NAMES}")
+def file_hash(path: Path) -> str:
+    if not path.exists(): return "file_not_found"
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(8192):
+            h.update(chunk)
+    return h.hexdigest()
 
-    # ── 2. Read composite ────────────────────────────────────────────────
+import argparse
+
+def run_production_inference(input_path="kothrud_pune_composite.tif", out_dir="outputs/unet_inference_v2"):
+    OUT_DIR = Path(out_dir)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    
+    COMPOSITE = Path(input_path)
+    SEG_TIF = OUT_DIR / "production_segmentation.tif"
+    MANIFEST = OUT_DIR / "inference_manifest.json"
+    
+    models_paths = [
+        Path("unet_weights_slope_run1.pth"),
+        Path("unet_weights_slope_run2.pth"),
+        Path("unet_weights_slope_run3.pth"),
+    ]
+    
+    manifest = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "source_raster_path": str(COMPOSITE),
+        "source_raster_hash": file_hash(COMPOSITE),
+        "model_paths": [str(p) for p in models_paths],
+        "model_hashes": [file_hash(p) for p in models_paths],
+        "model_architecture_identifier": "UNet",
+        "preprocessing_configuration": "Fixed range for NDVI and Slope, per-tile min-max for others",
+        "input_channel_order": "B, G, R, NDVI, Slope" if IN_CHANNELS==5 else "B, G, R, NDVI",
+        "tile_size": PATCH_SIZE,
+        "stride": STRIDE,
+        "receptive_field_margin": MARGIN,
+        "tta_transformations": 8,
+        "ensemble_count": 3,
+        "class_mapping": CLASS_NAMES,
+        "nodata_value": 255,
+        "python_version": sys.version
+    }
+    
+    print(f"\n[Input] {COMPOSITE}")
     with rasterio.open(COMPOSITE) as src:
         profile = src.profile.copy()
-        image = src.read().astype(np.float32)  # (C, H, W)
-        crs = src.crs
-        transform = src.transform
-
+        manifest["crs"] = str(src.crs)
+        manifest["resolution"] = src.res
+        image = src.read().astype(np.float32)
+        nodata_val = src.nodata
+        if nodata_val is not None:
+            nodata_mask = (image[0] == nodata_val)
+        else:
+            nodata_mask = (image[0] == 0)
+            
+    if image.shape[0] == 4 and IN_CHANNELS == 5:
+        print("[Warning] Input raster has 4 bands. Stacking a dummy 0-slope band to match 5-channel weights.")
+        slope_band = np.zeros((1, image.shape[1], image.shape[2]), dtype=np.float32)
+        image = np.concatenate([image, slope_band], axis=0)
+        
     _, full_h, full_w = image.shape
-    print(f"\n[Input] {COMPOSITE} : {image.shape[0]} bands, {full_w}x{full_h} px")
-    for b in range(image.shape[0]):
-        print(f"  Band {b+1}: min={image[b].min():.2f}, max={image[b].max():.2f}")
-
-    # ── 3. Sliding-window inference ──────────────────────────────────────
+    print(f"  Size: {full_w}x{full_h}, Bands: {image.shape[0]}")
+    
+    pad_h = int(np.ceil(max(0, full_h + 2*MARGIN - PATCH_SIZE) / STRIDE) * STRIDE) + PATCH_SIZE
+    pad_w = int(np.ceil(max(0, full_w + 2*MARGIN - PATCH_SIZE) / STRIDE) * STRIDE) + PATCH_SIZE
+    
+    pad_y_after = max(0, pad_h - full_h - MARGIN)
+    pad_x_after = max(0, pad_w - full_w - MARGIN)
+    
+    image_padded = np.pad(image, ((0, 0), (MARGIN, pad_y_after), (MARGIN, pad_x_after)), mode='reflect')
+    nodata_mask_padded = np.pad(nodata_mask, ((MARGIN, pad_y_after), (MARGIN, pad_x_after)), mode='constant', constant_values=True)
+    
     vote_sum = np.zeros((NUM_CLASSES, full_h, full_w), dtype=np.float64)
     vote_cnt = np.zeros((full_h, full_w), dtype=np.float64)
+    
+    # Weight window
+    window_1d = np.bartlett(PATCH_SIZE)
+    window_2d = np.outer(window_1d, window_1d)
+    
+    models = []
+    for model_idx, model_path in enumerate(models_paths):
+        print(f"\n[Model {model_idx+1}/3] Loading {model_path}")
+        model = UNet(in_channels=IN_CHANNELS, num_classes=NUM_CLASSES).to(DEVICE)
+        
+        if not model_path.exists():
+            raise FileNotFoundError(f"Trained weights not found: {model_path}")
+            
+        if model_path.stat().st_size < 1000:
+            raise ValueError(f"File {model_path} appears to be a Git LFS pointer. Scientific validation requires actual weights.")
+            
+        try:
+            model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+            print(f"  Loaded actual weights.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to load real trained weights from {model_path}: {e}")
+            
+        model.eval()
+        models.append(model)
+        
+    tiles_coords = []
+    for y0 in range(0, pad_h - PATCH_SIZE + 1, STRIDE):
+        for x0 in range(0, pad_w - PATCH_SIZE + 1, STRIDE):
+            tiles_coords.append((y0, x0))
+            
+    total_tiles = len(tiles_coords)
+    
+    ckpt_sum_path = OUT_DIR / "ckpt_vote_sum.npy"
+    ckpt_cnt_path = OUT_DIR / "ckpt_vote_cnt.npy"
+    ckpt_meta_path = OUT_DIR / "ckpt_meta.json"
+    
+    completed_tiles = []
+    if ckpt_sum_path.exists() and ckpt_cnt_path.exists() and ckpt_meta_path.exists():
+        print("[Checkpoint] Found existing checkpoints. Resuming...")
+        vote_sum = np.load(ckpt_sum_path)
+        vote_cnt = np.load(ckpt_cnt_path)
+        with open(ckpt_meta_path, 'r') as f:
+            completed_tiles = json.load(f)
+            
+    import os
+    for tile_idx, (y0, x0) in enumerate(tiles_coords):
+        if [y0, x0] in completed_tiles:
+            # print(f"Skipping tile {tile_idx+1}/{total_tiles} (already completed in checkpoint)")
+            continue
+            
+        print(f"Tile {tile_idx+1}/{total_tiles}")
+        
+        tile = image_padded[:, y0:y0+PATCH_SIZE, x0:x0+PATCH_SIZE]
+        valid_mask = ~nodata_mask_padded[y0:y0+PATCH_SIZE, x0:x0+PATCH_SIZE]
+        tile_norm = _normalise_tile(tile)
+        
+        # Batch 8 TTAs together for efficiency
+        tile_ttas = [apply_tta(tile_norm, i) for i in range(8)]
+        tensor_8 = torch.from_numpy(np.stack(tile_ttas)).to(DEVICE)
+        
+        orig_y0, orig_x0 = y0 - MARGIN, x0 - MARGIN
+        orig_y1, orig_x1 = orig_y0 + PATCH_SIZE, orig_x0 + PATCH_SIZE
+        out_y0, out_y1 = max(0, orig_y0), min(full_h, orig_y1)
+        out_x0, out_x1 = max(0, orig_x0), min(full_w, orig_x1)
+        
+        tile_y0, tile_y1 = out_y0 - orig_y0, out_y0 - orig_y0 + (out_y1 - out_y0)
+        tile_x0, tile_x1 = out_x0 - orig_x0, out_x0 - orig_x0 + (out_x1 - out_x0)
+        
+        if out_y1 <= out_y0 or out_x1 <= out_x0:
+            completed_tiles.append([y0, x0])
+            continue
+            
+        valid_region = valid_mask[tile_y0:tile_y1, tile_x0:tile_x1]
+        weight_region = window_2d[tile_y0:tile_y1, tile_x0:tile_x1] * valid_region
+        
+        for model_idx, model in enumerate(models):
+            print(f"  Model {model_idx+1}/{len(models)}")
+            with torch.inference_mode():
+                logits = model(tensor_8)
+                probs_8 = torch.softmax(logits, dim=1).cpu().numpy()
+                
+            for tta_idx in range(8):
+                print(f"    TTA {tta_idx+1}/8")
+                probs = inverse_tta(probs_8[tta_idx], tta_idx)
+                probs_region = probs[:, tile_y0:tile_y1, tile_x0:tile_x1] * weight_region
+                
+                vote_sum[:, out_y0:out_y1, out_x0:out_x1] += probs_region
+                vote_cnt[out_y0:out_y1, out_x0:out_x1] += weight_region
+                
+        completed_tiles.append([y0, x0])
+        
+        # Atomic saves
+        sum_tmp = ckpt_sum_path.with_suffix('.tmp.npy')
+        cnt_tmp = ckpt_cnt_path.with_suffix('.tmp.npy')
+        meta_tmp = ckpt_meta_path.with_suffix('.tmp.json')
+        
+        np.save(sum_tmp, vote_sum)
+        np.save(cnt_tmp, vote_cnt)
+        with open(meta_tmp, 'w') as f:
+            json.dump(completed_tiles, f)
+            
+        os.replace(sum_tmp, ckpt_sum_path)
+        os.replace(cnt_tmp, ckpt_cnt_path)
+        os.replace(meta_tmp, ckpt_meta_path)
 
-    n_patches = 0
-    with torch.no_grad():
-        for y0 in range(0, full_h, STRIDE):
-            for x0 in range(0, full_w, STRIDE):
-                y1 = min(y0 + PATCH_SIZE, full_h)
-                x1 = min(x0 + PATCH_SIZE, full_w)
+    print("\n[Inference] Processed all models and TTAs")
 
-                tile = image[:, y0:y1, x0:x1]
-                tile = _normalise_tile(tile)
-
-                th, tw = tile.shape[1], tile.shape[2]
-                if th < PATCH_SIZE or tw < PATCH_SIZE:
-                    tile = _pad_to(tile, PATCH_SIZE, PATCH_SIZE)
-
-                tensor = torch.from_numpy(tile).unsqueeze(0).to(DEVICE)
-                logits = model(tensor)
-                probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
-
-                probs = probs[:, :th, :tw]
-                vote_sum[:, y0:y1, x0:x1] += probs
-                vote_cnt[y0:y1, x0:x1] += 1.0
-                n_patches += 1
-
-    print(f"\n[Inference] Processed {n_patches} patches ({PATCH_SIZE}x{PATCH_SIZE}, stride={STRIDE})")
-
-    # Argmax
-    vote_cnt[vote_cnt == 0] = 1
-    avg_probs = vote_sum / vote_cnt[np.newaxis, :, :]
+    vote_cnt_safe = vote_cnt.copy()
+    vote_cnt_safe[vote_cnt_safe == 0] = 1
+    avg_probs = vote_sum / vote_cnt_safe[np.newaxis, :, :]
     class_map = avg_probs.argmax(axis=0).astype(np.uint8)
+    
+    invalid_final = (vote_cnt == 0)
+    class_map[invalid_final] = 255
+    
+    valid_pixel_count = int((~invalid_final).sum())
+    total_pixels = class_map.size
+    data_completeness_fraction = valid_pixel_count / total_pixels
+    
+    manifest["valid_pixel_count"] = valid_pixel_count
+    manifest["data_completeness_fraction"] = float(data_completeness_fraction)
 
-    # Class distribution
-    print("\n[Result] Class distribution:")
+    print("\n[Result] Class distribution (valid pixels):")
     for cls_id, cls_name in CLASS_NAMES.items():
         count = int((class_map == cls_id).sum())
-        pct = 100.0 * count / class_map.size
+        pct = 100.0 * count / max(1, valid_pixel_count)
         print(f"  {cls_id} ({cls_name:>11s}): {count:>8,} px  ({pct:5.1f}%)")
 
-    # ── 4. Save classified GeoTIFF ───────────────────────────────────────
     out_profile = profile.copy()
     out_profile.update(
         dtype=rasterio.uint8,
@@ -117,7 +253,6 @@ def run_inference():
         nodata=255,
     )
 
-    OUT_DIR.mkdir(exist_ok=True)
     with rasterio.open(SEG_TIF, "w", **out_profile) as dst:
         dst.write(class_map, 1)
         dst.write_colormap(1, {
@@ -128,45 +263,17 @@ def run_inference():
         })
 
     print(f"\n[Output] Classified GeoTIFF: {SEG_TIF.resolve()}")
-
-    # ── 5. Save PNG visualisation ────────────────────────────────────────
-    # Build RGB from bands 1-3 (B4=Red, B3=Green, B2=Blue)
-    rgb = np.stack([image[0], image[1], image[2]], axis=-1)  # (H, W, 3)
-    # Clip and normalise to 0-1 for display (typical S2 SR range ~0-3000)
-    rgb = np.clip(rgb / 3000.0, 0, 1)
-
-    # Build coloured class map
-    colour_map = np.zeros((full_h, full_w, 3), dtype=np.float32)
-    for cls_id, colour in CLASS_COLOURS.items():
-        mask = class_map == cls_id
-        colour_map[mask] = [c / 255.0 for c in colour]
-
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8), dpi=120)
-
-    axes[0].imshow(rgb)
-    axes[0].set_title("Sentinel-2 RGB (Kothrud, Pune)", fontsize=13)
-    axes[0].axis("off")
-
-    axes[1].imshow(colour_map)
-    axes[1].set_title("U-Net Classification (random weights)", fontsize=13)
-    axes[1].axis("off")
-
-    # Legend
-    legend_patches = [
-        Patch(facecolor=[c / 255 for c in CLASS_COLOURS[k]], label=f"{k}: {v}")
-        for k, v in CLASS_NAMES.items()
-    ]
-    axes[1].legend(handles=legend_patches, loc="lower right", fontsize=10,
-                   framealpha=0.8, edgecolor="gray")
-
-    plt.suptitle("Kothrud, Pune -- Land Cover Segmentation", fontsize=15, y=0.98)
-    plt.tight_layout()
-    plt.savefig(SEG_PNG, bbox_inches="tight", pad_inches=0.1)
-    plt.close()
-
-    print(f"[Output] Visualisation PNG: {SEG_PNG.resolve()}")
+    
+    with open(MANIFEST, "w") as f:
+        json.dump(manifest, f, indent=2)
+    print(f"[Output] Manifest: {MANIFEST.resolve()}")
+    
     print("\nDone.")
 
-
 if __name__ == "__main__":
-    run_inference()
+    parser = argparse.ArgumentParser(description="Run U-Net Production Inference")
+    parser.add_argument("--input", type=str, default="kothrud_pune_composite.tif", help="Path to input composite")
+    parser.add_argument("--out_dir", type=str, default="outputs/unet_inference_v2", help="Output directory")
+    args = parser.parse_args()
+    
+    run_production_inference(input_path=args.input, out_dir=args.out_dir)

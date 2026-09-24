@@ -12,6 +12,7 @@ from data_ingestion.sentinel import (
 from data_ingestion.osm_features import (
     fetch_building_footprints,
     fetch_road_network,
+    fetch_water_bodies,
     OSMDownloadError,
 )
 
@@ -23,5 +24,7 @@ __all__ = [
     "EmptyCollectionError",
     "fetch_building_footprints",
     "fetch_road_network",
+    "fetch_water_bodies",
     "OSMDownloadError",
 ]
+

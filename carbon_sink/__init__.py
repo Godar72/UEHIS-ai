@@ -1,5 +1,5 @@
 # UEHIS – Carbon Sink Planning Module
-# Biomass estimation, CO₂ sequestration, and optimal planting-site selection.
+# Biomass estimation, CO2 sequestration, and optimal planting-site selection.
 
 from carbon_sink.biomass import (
     AllometricModel,
@@ -13,10 +13,21 @@ from carbon_sink.biomass import (
     CARBON_FRACTION,
     CO2_PER_CARBON,
 )
+from carbon_sink.canopy_height import (
+    fetch_canopy_height_ee,
+    estimate_canopy_height_fallback,
+    get_canopy_height,
+    compute_block_co2,
+    fallback_height_from_frac,
+    carbon_from_canopy_params,
+)
 from carbon_sink.optimizer import (
     OptimizationResult,
     optimize_planting_sites,
     budget_sweep,
+)
+from carbon_sink.planting_recommender import (
+    recommend_planting_sites,
 )
 
 __all__ = [
@@ -31,8 +42,17 @@ __all__ = [
     "compute_co2_for_geodataframe",
     "CARBON_FRACTION",
     "CO2_PER_CARBON",
+    # canopy height & carbon stock
+    "fetch_canopy_height_ee",
+    "estimate_canopy_height_fallback",
+    "get_canopy_height",
+    "compute_block_co2",
+    "fallback_height_from_frac",
+    "carbon_from_canopy_params",
     # optimizer
     "OptimizationResult",
     "optimize_planting_sites",
     "budget_sweep",
+    # planting recommender
+    "recommend_planting_sites",
 ]

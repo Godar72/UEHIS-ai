@@ -1,10 +1,13 @@
 """
 scoring/uehi_score.py
 ─────────────────────
-8-factor Urban Eco-Heat Island (UEHI) scoring engine.
+6-factor Urban Eco-Heat Island (UEHI) scoring engine.
 
 Reads factor weights and directions from ``uehi_config.json``, normalises
 each indicator column, computes the weighted sum, and scales to 0–100.
+
+``water_availability`` was formally investigated and excluded for the
+Kothrud pilot.  See the methodology report for details.
 
 Score interpretation
 --------------------
@@ -130,6 +133,8 @@ def compute_uehi_scores(
     KeyError
         If a required factor column is missing from *gdf*.
     """
+    from scoring.entropy import entropy_weights
+
     config = load_config(config_path)
     factors = config["factors"]
 
@@ -142,19 +147,31 @@ def compute_uehi_scores(
 
     result = gdf.copy()
 
+    # Calculate entropy weights
+    ew = entropy_weights(result, list(factors.keys()))
+
     # Normalise each factor and accumulate the weighted sum
     weighted_sum = pd.Series(0.0, index=result.index)
 
     for name, spec in factors.items():
-        weight = spec["weight"]
         direction = spec["direction"]
-
         norm_col = f"_norm_{name}"
-        result[norm_col] = normalise_factor(result[name], direction)
-        weighted_sum += weight * result[norm_col]
+        result[norm_col] = normalise_factor(result[name], direction).fillna(0.0)
+        weighted_sum += ew[name] * result[norm_col]
+
+    base_score = (weighted_sum * 100).clip(0, 100)
+    
+    # Synergy: s(i) = α × N(NDVI) × N(Temperature) × 100
+    ndvi_norm = normalise_factor(result["ndvi"], "positive").fillna(0.0)
+    temp_norm = normalise_factor(result["temperature"], "negative").fillna(0.0)
+    synergy = 0.1 * ndvi_norm * temp_norm * 100
+    
+    # Population multiplier: m(i) = 1 − β × N_positive(Pop_i)
+    pop_norm = normalise_factor(result["population_exposure"], "positive").fillna(0.0)
+    pop_multiplier = 1 - 0.3 * pop_norm
 
     # Scale to 0–100 and clamp for safety
-    result[score_column] = (weighted_sum * 100).clip(0, 100).round(2)
+    result[score_column] = ((base_score + synergy) * pop_multiplier).clip(0, 100).round(2)
 
     # Drop internal normalised columns
     norm_cols = [c for c in result.columns if c.startswith("_norm_")]
