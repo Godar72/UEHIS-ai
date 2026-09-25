@@ -26,8 +26,9 @@ import pandas as pd
 
 CANOPY_CLASS_ID = 0
 CANOPY_AREA_SOURCE_LANDCOVER = (
-    "landsat8_segmentation_class0_sum_block_intersection_area_epsg32643"
+    "legacy_landsat_polygon_baseline"
 )
+CANOPY_AREA_SOURCE_RASTER = "unet_raster_production"
 CANOPY_AREA_SOURCE_SCORES = "tree_density_x_block_area_m2"
 
 
@@ -113,9 +114,76 @@ def aggregate_canopy_area_m2_from_merged(
     return pd.DataFrame(records)
 
 
+def aggregate_canopy_area_m2_from_raster(
+    blocks_gdf: gpd.GeoDataFrame,
+    unet_tif: str | Path,
+) -> pd.DataFrame:
+    """
+    Calculate canopy area from U-Net raster segmentation (class_id == 0).
+    Uses rasterize and bincount for vectorized O(N) aggregation.
+    """
+    unet_path = Path(unet_tif)
+    if not unet_path.exists():
+        raise FileNotFoundError(f"U-Net raster not found: {unet_path.resolve()}")
+
+    import rasterio
+    from rasterio.features import rasterize
+
+    with rasterio.open(unet_path) as src:
+        unet_data = src.read(1)
+        prof = src.profile
+        nodata = src.nodata if src.nodata is not None else 255
+        pixel_area_m2 = prof['transform'][0] * abs(prof['transform'][4])
+
+    if blocks_gdf.crs != prof['crs']:
+        blocks_gdf = blocks_gdf.to_crs(prof['crs'])
+        
+    shapes_gen = ((geom, idx) for idx, geom in enumerate(blocks_gdf.geometry))
+    try:
+        block_idx_arr = rasterize(
+            shapes_gen, 
+            out_shape=(prof['height'], prof['width']), 
+            transform=prof['transform'], 
+            fill=-1, 
+            dtype=np.int32, 
+            all_touched=False
+        )
+    except ValueError:
+        block_idx_arr = np.full((prof['height'], prof['width']), -1, dtype=np.int32)
+
+    valid_mask = (block_idx_arr >= 0) & (unet_data != nodata)
+    valid_bidx = block_idx_arr[valid_mask]
+    valid_data = unet_data[valid_mask]
+    
+    num_blocks = len(blocks_gdf)
+    c_cnt = np.bincount(valid_bidx[valid_data == CANOPY_CLASS_ID], minlength=num_blocks)
+    v_cnt = np.bincount(valid_bidx, minlength=num_blocks)
+    t_cnt = np.bincount(block_idx_arr[block_idx_arr >= 0], minlength=num_blocks)
+    
+    with np.errstate(divide='ignore', invalid='ignore'):
+        comp = np.where(t_cnt > 0, v_cnt / t_cnt, 0.0)
+
+    canopy_area_m2 = c_cnt * pixel_area_m2
+
+    records = []
+    for idx, row in blocks_gdf.iterrows():
+        records.append({
+            "block_id": row["block_id"],
+            "block_area_m2": float(row.geometry.area),
+            "canopy_pixel_count": int(c_cnt[idx]),
+            "canopy_area_m2": float(canopy_area_m2[idx]),
+            "canopy_area_source": CANOPY_AREA_SOURCE_RASTER,
+            "valid_pixel_count": int(v_cnt[idx]),
+            "canopy_completeness": float(comp[idx]),
+        })
+
+    return pd.DataFrame(records)
+
+
 def attach_canopy_area_m2(
     blocks_df: pd.DataFrame,
     *,
+    unet_tif: str | Path | None = None,
     merged_geojson: str | Path | None = None,
     blocks_gdf: gpd.GeoDataFrame | None = None,
 ) -> tuple[pd.DataFrame, str]:
@@ -124,8 +192,9 @@ def attach_canopy_area_m2(
 
     Priority:
     1. Existing ``canopy_area_m2`` column
-    2. Block-clipped aggregate from merged landcover + block geometries
-    3. ``tree_density × block_area_m2`` from the block scores schema
+    2. Raster aggregation from U-Net segmentation
+    3. Block-clipped aggregate from merged landcover + block geometries
+    4. ``tree_density × block_area_m2`` from the block scores schema
 
     Returns
     -------
@@ -135,6 +204,12 @@ def attach_canopy_area_m2(
 
     if "canopy_area_m2" in result.columns:
         return result, "input_canopy_area_m2"
+
+    if unet_tif is not None and blocks_gdf is not None:
+        canopy_df = aggregate_canopy_area_m2_from_raster(blocks_gdf, unet_tif)
+        result = result.merge(canopy_df, on="block_id", how="left")
+        result["canopy_area_m2"] = result["canopy_area_m2"].fillna(0.0)
+        return result, CANOPY_AREA_SOURCE_RASTER
 
     if merged_geojson is not None and blocks_gdf is not None:
         canopy_df = aggregate_canopy_area_m2_from_merged(blocks_gdf, merged_geojson)

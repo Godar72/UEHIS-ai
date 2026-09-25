@@ -229,6 +229,8 @@ def estimate_canopy_height_fallback(
 # 3. Combined fetch-or-fallback
 # ---------------------------------------------------------------------------
 
+_UNCALIBRATED_FALLBACK_LABEL = "UNCALIBRATED_FALLBACK(canopy_area/block_area)"
+
 def get_canopy_height(
     blocks_df: pd.DataFrame,
     block_geometries: list | None = None,
@@ -236,20 +238,73 @@ def get_canopy_height(
     """
     Get canopy height per block, trying GEE first then falling back.
 
+    When GEE is unavailable, behaviour depends on the
+    ``ALLOW_UNCALIBRATED_HEIGHT_FALLBACK`` environment variable:
+
+    * **Not set / falsy** — raises ``RuntimeError`` to prevent silent
+      use of uncalibrated estimates in production.
+    * **"true"** — computes height from ``canopy_area_m2 / block_area_m2``
+      using the linear fallback model and labels the source as
+      ``UNCALIBRATED_FALLBACK(canopy_area/block_area)``.
+
     Returns
     -------
     (heights_df, source_label)
         *heights_df* has ``block_id`` and ``canopy_height_m``.
         *source_label* is ``"ETH_GlobalCanopyHeight_2020"`` or
-        ``"FALLBACK_ESTIMATE(canopy_frac)"``.
+        ``"UNCALIBRATED_FALLBACK(canopy_area/block_area)"``.
     """
+    import os
+
     gee_result = fetch_canopy_height_ee(blocks_df, block_geometries)
 
     if gee_result is not None and len(gee_result) > 0:
         return gee_result, "ETH_GlobalCanopyHeight_2020"
 
-    fallback = estimate_canopy_height_fallback(blocks_df)
-    return fallback, "FALLBACK_ESTIMATE(canopy_frac)"
+    # ── GEE unavailable — check whether uncalibrated fallback is allowed ──
+    allow_fallback = os.environ.get(
+        "ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", ""
+    ).strip().lower() == "true"
+
+    if not allow_fallback:
+        raise RuntimeError(
+            "GEE canopy height data is unavailable and the "
+            "scientifically uncalibrated fallback cannot be silently "
+            "substituted in production.  Set the environment variable "
+            "ALLOW_UNCALIBRATED_HEIGHT_FALLBACK=true to opt in."
+        )
+
+    # ── Uncalibrated fallback: height from canopy_area_m2 / block_area_m2 ──
+    missing = {"canopy_area_m2", "block_area_m2"} - set(blocks_df.columns)
+    if missing:
+        raise ValueError(
+            f"Uncalibrated fallback requires columns {sorted(missing)} "
+            f"but they are missing from blocks_df."
+        )
+
+    frac = (
+        blocks_df["canopy_area_m2"].to_numpy(dtype=float)
+        / np.maximum(blocks_df["block_area_m2"].to_numpy(dtype=float), 1.0)
+    )
+    height = fallback_height_from_frac(frac)
+
+    result = pd.DataFrame({
+        "block_id": blocks_df["block_id"],
+        "canopy_height_m": np.round(height, 2),
+    })
+
+    logger.warning(
+        "[CanopyHeight] Using UNCALIBRATED fallback "
+        "(canopy_area_m2 / block_area_m2 -> height) for %d blocks. "
+        "Heights are NOT satellite-derived.",
+        len(result),
+    )
+    print(
+        f"[CanopyHeight]  WARNING  Using UNCALIBRATED fallback "
+        f"(canopy_area/block_area -> height) for {len(result)} blocks.  "
+        f"Heights are NOT satellite-derived."
+    )
+    return result, _UNCALIBRATED_FALLBACK_LABEL
 
 
 # ---------------------------------------------------------------------------

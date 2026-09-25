@@ -23,23 +23,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from carbon_sink.canopy_height import compute_block_co2
 from carbon_sink.planting_recommender import recommend_planting_sites
-from run_scoring import make_block_grid
+from utils.geography import generate_block_grid
+from shapely.geometry import box
 
 # ── Configuration (override via env for other Pune study areas) ───────────
-SCORES_CSV = Path(os.environ.get("UEHIS_SCORES_CSV", "outputs/kothrud_scores_final.csv"))
+SCORES_CSV = Path(os.environ.get("UEHIS_SCORES_CSV", "outputs/TEST_ONLY_kothrud_scores_phase3.csv"))
 MERGED_GEOJSON = Path(
     os.environ.get("UEHIS_MERGED_GEOJSON", "outputs/kothrud_merged.geojson")
 )
 COMPOSITE_TIF = Path(
     os.environ.get("UEHIS_COMPOSITE_TIF", "kothrud_pune_composite.tif")
 )
+UNET_TIF = Path(
+    os.environ.get("UEHIS_UNET_TIF", "outputs/phase3_seg_10m.tif")
+)
 CARBON_OUTPUT_CSV = Path(
-    os.environ.get("UEHIS_CARBON_OUTPUT_CSV", "outputs/kothrud_carbon_stock.csv")
+    os.environ.get("UEHIS_CARBON_OUTPUT_CSV", "outputs/unet_raster_production.csv")
 )
 RECOMMENDATIONS_CSV = Path(
     os.environ.get(
         "UEHIS_PLANTING_RECOMMENDATIONS_CSV",
-        "outputs/kothrud_planting_recommendations.csv",
+        "outputs/unet_raster_planting_recommendations.csv",
     )
 )
 
@@ -79,24 +83,23 @@ def main():
 
     blocks_gdf = None
     merged_path = MERGED_GEOJSON if MERGED_GEOJSON.exists() else None
-    if merged_path is not None and COMPOSITE_TIF.exists():
+    unet_path = UNET_TIF if UNET_TIF.exists() else None
+    
+    if COMPOSITE_TIF.exists():
         import rasterio
 
         with rasterio.open(str(COMPOSITE_TIF)) as src:
             raster_bounds = src.bounds
-        grid = make_block_grid(
-            (
-                raster_bounds.left,
-                raster_bounds.bottom,
-                raster_bounds.right,
-                raster_bounds.top,
-            ),
-        )
+            
+        boundary_geom = box(raster_bounds.left, raster_bounds.bottom, raster_bounds.right, raster_bounds.top)
+        boundary_gdf = gpd.GeoDataFrame({"geometry": [boundary_geom]}, crs="EPSG:4326")
+        
+        grid = generate_block_grid(boundary_gdf)
         blocks_gdf = grid.merge(scores[["block_id"]], on="block_id", how="inner")
-        blocks_gdf = gpd.GeoDataFrame(blocks_gdf, geometry="geometry", crs="EPSG:4326")
 
     enriched = compute_block_co2(
         scores,
+        unet_tif=unet_path,
         merged_geojson=merged_path,
         blocks_gdf=blocks_gdf,
     )
@@ -114,6 +117,58 @@ def main():
     print(f"\n[Output] Carbon stock results saved to {CARBON_OUTPUT_CSV.resolve()}")
     print(f"  New columns added: {new_cols}")
     print(f"  NOTE: UEHI score files are NOT modified.")
+
+    # Write provenance
+    import hashlib
+    import json
+    from datetime import datetime
+    import subprocess
+    
+    # Attempt to get git commit
+    git_commit = "unknown"
+    try:
+        git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+    except Exception:
+        pass
+        
+    # Get height source info
+    height_source_val = merged['canopy_height_source'].iloc[0] if not merged.empty else "unknown"
+    is_fallback = "FALLBACK" in height_source_val
+
+    provenance = {
+        "pipeline_version": "Phase 4 Stage 1",
+        "git_commit": git_commit,
+        "processing_timestamp": datetime.utcnow().isoformat(),
+        "canopy_class_id": 0,
+        "block_grid_specification": "EPSG:32643",
+        "grid_origin": "E=300000, N=2000000",
+        "grid_size": "16x16 blocks (example)",
+        "block_size": "250m x 250m",
+        "unet_model_checksums": [
+            "f6a1c4f266ec53e3b7203c105aa7da8245e96046cee500e8d3f536c2d5df7c22",
+            "47709658f8ebc1d4582ec8604db5e65f38526ef9075ca254a6e92f9987fd3a40",
+            "74275566a429ea81eec62194a8db84241e806ea8e11f2120dd077a56f13cfa15"
+        ],
+        "height_source": height_source_val,
+        "height_source_mode": "production" if not is_fallback else "development/research",
+        "fallback_status": is_fallback
+    }
+    
+    if unet_path and unet_path.exists():
+        import rasterio
+        with rasterio.open(unet_path) as src:
+            provenance["segmentation_raster_path"] = str(unet_path)
+            provenance["crs"] = str(src.crs)
+            provenance["spatial_resolution"] = src.res
+            # grid size approximation from raster if needed, but keeping simple above
+        
+        with open(unet_path, "rb") as f:
+            provenance["segmentation_raster_sha256"] = hashlib.sha256(f.read()).hexdigest()
+            
+    manifest_path = CARBON_OUTPUT_CSV.with_suffix('.json')
+    with open(manifest_path, 'w') as f:
+        json.dump(provenance, f, indent=2)
+    print(f"  Provenance saved to: {manifest_path.resolve()}")
 
     # ── 4. Run planting recommender ──────────────────────────────────
     print("\n" + "-" * 65)

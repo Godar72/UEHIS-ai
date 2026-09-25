@@ -195,12 +195,12 @@ def compute_agb(
 
 
 # ---------------------------------------------------------------------------
-# CO₂ sequestration
+# Standing CO₂ stock
 # ---------------------------------------------------------------------------
 
 def agb_to_co2_tonnes(agb_kg: float | np.ndarray) -> float | np.ndarray:
     """
-    Convert AGB (kg) → tonnes of CO₂ sequestered.
+    Convert AGB (kg) → standing carbon stock expressed as tonnes CO2-equivalent.
 
     AGB → carbon (×0.47) → CO₂ (×44/12) → tonnes (÷1000)
     """
@@ -214,7 +214,7 @@ def canopy_volume_to_co2(
     model_name: str = DEFAULT_MODEL,
 ) -> float | np.ndarray:
     """
-    End-to-end: canopy volume (m³) → tonnes of CO₂ sequestered.
+    End-to-end: canopy volume (m³) → standing carbon stock expressed as tonnes CO2-equivalent.
 
     Parameters
     ----------
@@ -230,7 +230,7 @@ def canopy_volume_to_co2(
     Returns
     -------
     float or ndarray
-        CO₂ sequestered in metric tonnes.
+        standing carbon stock expressed as tonnes CO2-equivalent.
     """
     dbh = estimate_dbh_from_volume(
         canopy_volume,

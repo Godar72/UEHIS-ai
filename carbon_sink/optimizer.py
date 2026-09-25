@@ -45,7 +45,7 @@ class OptimizationResult:
     """Sum of projected UEHI score gains across all selected sites."""
 
     total_co2_tonnes: float
-    """Estimated total CO₂ sequestration (tonnes) from new plantings."""
+    """Estimated total standing carbon stock expressed as tonnes CO2-equivalent from new plantings."""
 
     num_sites: int
     """Number of selected sites."""

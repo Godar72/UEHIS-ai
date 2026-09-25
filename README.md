@@ -39,7 +39,7 @@ Identifies optimal sites for green infrastructure based on UEHI scores and land 
 
 - Candidate site ranking by heat-mitigation potential
 - Tree canopy and green-roof suitability analysis
-- Carbon sequestration capacity estimation
+- Standing carbon stock capacity estimation
 - Cost-benefit prioritisation matrix
 
 ### Phase 5 · API Deployment & Dashboard (`api/` · `dashboard/`)

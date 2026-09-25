@@ -89,10 +89,13 @@ def recommend_planting_sites(
     if stock_col not in blocks_df.columns:
         stock_col = "carbon_tons_sequestered"
 
+    c_frac_col = "tree_density" if "tree_density" in blocks_df.columns else "canopy_frac"
+    i_frac_col = "impervious_surfaces" if "impervious_surfaces" in blocks_df.columns else "imperv_frac"
+
     # ── 1. Apply eligibility constraints ──────────────────────────────
     eligible = blocks_df[
-        (blocks_df["canopy_frac"] < max_canopy_frac)
-        & (blocks_df["imperv_frac"] < max_imperv_frac)
+        (blocks_df[c_frac_col] < max_canopy_frac)
+        & (blocks_df[i_frac_col] < max_imperv_frac)
     ].copy()
 
     print(
@@ -136,8 +139,8 @@ def recommend_planting_sites(
     #   water-access data becomes available.
     recommendations = pd.DataFrame({
         "block_id": eligible["block_id"].values,
-        "canopy_frac": eligible["canopy_frac"].values.round(4),
-        "imperv_frac": eligible["imperv_frac"].values.round(4),
+        "canopy_frac": eligible[c_frac_col].values.round(4),
+        "imperv_frac": eligible[i_frac_col].values.round(4),
         "canopy_height_m": eligible["canopy_height_m"].values.round(2),
         "current_stock_co2e": np.round(current_stock, 4),
         "target_stock_co2e": np.round(target_stock, 4),
