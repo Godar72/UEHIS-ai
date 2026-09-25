@@ -134,6 +134,18 @@ def aggregate_canopy_area_m2_from_raster(
         prof = src.profile
         nodata = src.nodata if src.nodata is not None else 255
         pixel_area_m2 = prof['transform'][0] * abs(prof['transform'][4])
+        if prof['crs'].is_geographic:
+            import pyproj
+            from shapely.geometry import box
+            from shapely.ops import transform
+            geom = box(
+                prof['transform'][2], 
+                prof['transform'][5] - abs(prof['transform'][4]),
+                prof['transform'][2] + prof['transform'][0], 
+                prof['transform'][5]
+            )
+            project = pyproj.Transformer.from_crs(prof['crs'], "EPSG:32643", always_xy=True).transform
+            pixel_area_m2 = transform(project, geom).area
 
     if blocks_gdf.crs != prof['crs']:
         blocks_gdf = blocks_gdf.to_crs(prof['crs'])
@@ -207,7 +219,8 @@ def attach_canopy_area_m2(
 
     if unet_tif is not None and blocks_gdf is not None:
         canopy_df = aggregate_canopy_area_m2_from_raster(blocks_gdf, unet_tif)
-        result = result.merge(canopy_df, on="block_id", how="left")
+        merge_cols = [c for c in canopy_df.columns if c not in result.columns or c == "block_id"]
+        result = result.merge(canopy_df[merge_cols], on="block_id", how="left")
         result["canopy_area_m2"] = result["canopy_area_m2"].fillna(0.0)
         return result, CANOPY_AREA_SOURCE_RASTER
 

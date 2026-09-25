@@ -287,3 +287,38 @@ class TestRasterFirstCanopy:
         assert b3_res["valid_pixel_count"] == 0
         assert math.isclose(b3_res["canopy_area_m2"], 0.0)
         assert b3_res["canopy_completeness"] == 0.0
+
+
+class TestQAIntegrity:
+    def test_duplicate_block_id(self, monkeypatch):
+        monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
+        blocks_df = pd.DataFrame({"block_id": ["B1", "B1"], "block_area_m2": [10000, 10000], "canopy_area_m2": [1000, 1000]})
+        with pytest.raises(ValueError, match="QA FAILED: Duplicate block IDs found"):
+            compute_block_co2(blocks_df, allometric_model="urban_generic")
+            
+    def test_negative_canopy_area(self, monkeypatch):
+        monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [-10]})
+        with pytest.raises(ValueError, match="QA FAILED: Negative canopy_area_m2 found."):
+            compute_block_co2(blocks_df, allometric_model="urban_generic")
+            
+    def test_canopy_area_exceeds_block(self, monkeypatch):
+        monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [15000]})
+        with pytest.raises(ValueError, match="QA FAILED: canopy_area_m2 exceeds block_area_m2."):
+            compute_block_co2(blocks_df, allometric_model="urban_generic")
+            
+    def test_negative_height(self, monkeypatch):
+        monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [1000], "canopy_frac": [0.5]})
+        import carbon_sink.canopy_height
+        monkeypatch.setattr(carbon_sink.canopy_height, "get_canopy_height", lambda df, geo: (pd.DataFrame({"block_id": ["B1"], "canopy_height_m": [-1.0]}), "mocked"))
+        
+        with pytest.raises(ValueError, match="QA FAILED: Negative canopy height found."):
+            compute_block_co2(blocks_df, allometric_model="urban_generic")
+
+    def test_canopy_fraction_bounds(self, monkeypatch):
+        monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [1000], "canopy_fraction": [1.5]})
+        with pytest.raises(ValueError, match="QA FAILED: canopy_fraction outside"):
+            compute_block_co2(blocks_df, allometric_model="urban_generic")

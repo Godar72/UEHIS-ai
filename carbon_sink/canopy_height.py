@@ -111,6 +111,10 @@ def fetch_canopy_height_ee(
 
     # Authenticate
     try:
+        import os
+        if os.environ.get("UEHIS_TEST_NO_GEE") == "1":
+            logger.info("[CanopyHeight] UEHIS_TEST_NO_GEE is set. Bypassing GEE.")
+            return None
         authenticate_gee()
     except Exception as exc:
         logger.warning(
@@ -421,6 +425,7 @@ def compute_block_co2(
     block_geometries: list | None = None,
     allometric_model: str = "urban_generic",
     merged_geojson: str | Path | None = None,
+    unet_tif: str | Path | None = None,
     blocks_gdf: "gpd.GeoDataFrame | None" = None,
 ) -> pd.DataFrame:
     """
@@ -447,8 +452,10 @@ def compute_block_co2(
         Name of the model in ``carbon_sink.biomass.MODELS``.
     merged_geojson : path-like, optional
         Merged landcover GeoJSON for direct canopy-area aggregation.
+    unet_tif : path-like, optional
+        U-Net raster segmentation file (class 0 = canopy).
     blocks_gdf : geopandas.GeoDataFrame, optional
-        Block polygons (``block_id``, geometry) paired with *merged_geojson*.
+        Block polygons (``block_id``, geometry) paired with *merged_geojson* or *unet_tif*.
 
     Returns
     -------
@@ -465,11 +472,19 @@ def compute_block_co2(
     result, canopy_area_source = attach_canopy_area_m2(
         result,
         merged_geojson=merged_geojson,
+        unet_tif=unet_tif,
         blocks_gdf=blocks_gdf,
     )
     result["canopy_area_source"] = canopy_area_source
 
     # ── Step 1: Get canopy height ─────────────────────────────────────
+    if block_geometries is None and blocks_gdf is not None:
+        # Extract geometries matching the order in result DataFrame
+        # Merge to ensure alignment
+        aligned_gdf = result[["block_id"]].merge(blocks_gdf[["block_id", "geometry"]], on="block_id", how="left")
+        if not aligned_gdf["geometry"].isna().any():
+            block_geometries = aligned_gdf["geometry"].tolist()
+
     heights_df, source_label = get_canopy_height(result, block_geometries)
     result = result.merge(heights_df, on="block_id", how="left")
     result["canopy_height_m"] = result["canopy_height_m"].fillna(0.0)
@@ -495,6 +510,45 @@ def compute_block_co2(
     )
     result["allometric_model"] = allometric_model
 
+    # ── Canopy fraction computation ───────────────────────────────────
+    if "canopy_fraction" not in result.columns:
+        result["canopy_fraction"] = (
+            result["canopy_area_m2"] / np.maximum(result["block_area_m2"], 1.0)
+        )
+    
+    # ── Quality Control ───────────────────────────────────────────────
+    # FAIL LOUDLY if assumptions are violated.
+    
+    # 1. No duplicate IDs
+    if result["block_id"].duplicated().any():
+        dups = result[result["block_id"].duplicated()]["block_id"].tolist()
+        raise ValueError(f"QA FAILED: Duplicate block IDs found: {dups[:5]}")
+        
+    # 2. No negative canopy area
+    if (result["canopy_area_m2"] < 0).any():
+        raise ValueError("QA FAILED: Negative canopy_area_m2 found.")
+        
+    # 3. Canopy area <= block area (with minor float tolerance)
+    if (result["canopy_area_m2"] > result["block_area_m2"] + 1.0).any():
+        raise ValueError("QA FAILED: canopy_area_m2 exceeds block_area_m2.")
+        
+    # 4. Canopy fraction [0,1]
+    if (result["canopy_fraction"] < 0).any() or (result["canopy_fraction"] > 1.01).any():
+        raise ValueError("QA FAILED: canopy_fraction outside [0, 1].")
+        
+    # 5. Height >= 0
+    if (result["canopy_height_m"] < 0).any():
+        raise ValueError("QA FAILED: Negative canopy height found.")
+        
+    # 6. Carbon values finite and non-negative
+    for col in ["n_trees_est", "agb_kg", "carbon_stock_tonnes_co2e"]:
+        if result[col].isna().any():
+            raise ValueError(f"QA FAILED: NaN found in {col}.")
+        if not np.isfinite(result[col]).all():
+            raise ValueError(f"QA FAILED: Non-finite value found in {col}.")
+        if (result[col] < 0).any():
+            raise ValueError(f"QA FAILED: Negative value found in {col}.")
+
     # ── Summary log ───────────────────────────────────────────────────
     total_co2 = result["carbon_stock_tonnes_co2e"].sum()
     mean_h = result.loc[
@@ -513,5 +567,6 @@ def compute_block_co2(
         f"  Blocks processed  : {len(result)}\n"
         f"  NOTE: This is estimated STANDING CARBON STOCK, not annual sequestration."
     )
+
 
     return result
