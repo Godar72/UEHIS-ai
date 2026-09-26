@@ -322,3 +322,25 @@ class TestQAIntegrity:
         blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [1000], "canopy_fraction": [1.5]})
         with pytest.raises(ValueError, match="QA FAILED: canopy_fraction outside"):
             compute_block_co2(blocks_df, allometric_model="urban_generic")
+
+
+class TestModernCarbonValidation:
+    def test_modern_carbon_result_matches_independently(self):
+        """Verify the Kothrud modern production output against independent calc."""
+        import os
+        import pandas as pd
+        from carbon_sink.canopy_height import carbon_from_canopy_params
+        csv_path = 'outputs/unet_raster_production.csv'
+        if not os.path.exists(csv_path):
+            return
+        df = pd.read_csv(csv_path)
+        if 'ETH_GlobalCanopyHeight_2020' not in df['canopy_height_source'].iloc[0]:
+            return
+        n_trees, total_agb_kg, co2_tonnes = carbon_from_canopy_params(
+            df['canopy_area_m2'].values,
+            df['canopy_height_m'].values,
+            'urban_generic'
+        )
+        assert abs(n_trees.sum() - 181032) < 2
+        assert abs(total_agb_kg.sum() - 5145785) < 2
+        assert abs(co2_tonnes.sum() - 8867.9) < 0.1

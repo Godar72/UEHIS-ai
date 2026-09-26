@@ -1,14 +1,72 @@
-venv/
-.env
+# ============================================================
+# UEHIS .gitignore
+# ============================================================
+
+# --- Python bytecode & caches ---
 __pycache__/
 *.pyc
-.DS_Store
+*.pyo
+.pytest_cache/
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+
+# --- Credentials & local config ---
+.env
+.env.*
+
+# --- Large raster datasets ---
 *.tif
 *.tiff
-outputs/
+# Allow small tracked sample TIFs if explicitly git-added
+
+# --- Large raw / generated data ---
+*.pbf
+*.npy
+UEHIS_exports/
 cache/
-.pytest_cache/
-*.pdf
+
+# --- Large zips & model weight archives ---
+uehis_verified_weights.zip
+feature_engineering.zip
 patches_4class.zip
 patches_4class_dense.zip
 patches_4class_spatial.zip
+# patches_4class_spatial_with_slope.zip tracked via LFS
+# *.pth tracked via LFS
+
+# --- Generated outputs ---
+outputs/
+
+# --- OS & editor temporary files ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# --- PDF / binary documents (not source code) ---
+*.pdf
+
+# --- Large images (generated maps/previews) ---
+pune_study_area_map.png
+pune_study_area_map_labeled.png
+kothrud_labels_preview.png
+kothrud_pune_composite.tif
+kothrud_dynamicworld_labels_2026.tif
+
+# --- Temporary logs ---
+*.log
+
+# --- Archive old training datasets (large zips) ---
+archive/old_experiments/UEHIS_training/*.zip
+
+# --- Presentation files ---
+# UEHIS_CA2_Merged_Deck.pptx is tracked for documentation
+
+# --- Jupyter checkpoints ---
+.ipynb_checkpoints/

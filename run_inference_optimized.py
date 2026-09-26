@@ -93,10 +93,12 @@ def run_production_inference(input_path="kothrud_pune_composite.tif", out_dir="o
         manifest["resolution"] = src.res
         image = src.read().astype(np.float32)
         nodata_val = src.nodata
+        # Detect ALL non-finite values (NaN, Inf) across ALL channels
+        nodata_mask = ~np.isfinite(image).all(axis=0)
         if nodata_val is not None:
-            nodata_mask = (image[0] == nodata_val)
+            nodata_mask = nodata_mask | (image[0] == nodata_val)
         else:
-            nodata_mask = (image[0] == 0)
+            nodata_mask = nodata_mask | (image[0] == 0)
             
     if image.shape[0] == 4 and IN_CHANNELS == 5:
         print("[Warning] Input raster has 4 bands. Stacking a dummy 0-slope band to match 5-channel weights.")
@@ -172,6 +174,7 @@ def run_production_inference(input_path="kothrud_pune_composite.tif", out_dir="o
         tile = image_padded[:, y0:y0+PATCH_SIZE, x0:x0+PATCH_SIZE]
         valid_mask = ~nodata_mask_padded[y0:y0+PATCH_SIZE, x0:x0+PATCH_SIZE]
         tile_norm = _normalise_tile(tile)
+        tile_norm = np.nan_to_num(tile_norm, nan=0.0, posinf=0.0, neginf=0.0)
         
         # Batch 8 TTAs together for efficiency
         tile_ttas = [apply_tta(tile_norm, i) for i in range(8)]

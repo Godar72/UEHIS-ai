@@ -140,31 +140,39 @@ def fetch_canopy_height_ee(
         for idx, (_, row) in enumerate(blocks_df.iterrows()):
             geom = block_geometries[idx] if block_geometries else row["geometry"]
             coords = list(geom.exterior.coords)
-            ee_geom = ee.Geometry.Polygon([[[c[0], c[1]] for c in coords]])
+            ee_geom = ee.Geometry.Polygon([[[c[0], c[1]] for c in coords]], proj="EPSG:32643", evenOdd=False)
             feat = ee.Feature(ee_geom, {"block_id": row["block_id"]})
             features.append(feat)
 
-        fc = ee.FeatureCollection(features)
-
-        # Reduce: mean canopy height per block
-        reduced = canopy_img.reduceRegions(
-            collection=fc,
-            reducer=ee.Reducer.mean(),
-            scale=10,
-        )
-
-        # Fetch results
-        results = reduced.getInfo()
+        # Batch process in chunks to prevent GEE timeouts
+        chunk_size = 10
         records = []
-        for feat in results["features"]:
-            props = feat["properties"]
-            height = props.get("mean")
-            if height is None:
-                height = 0.0
-            records.append({
-                "block_id": props["block_id"],
-                "canopy_height_m": round(float(height), 2),
-            })
+        for i in range(0, len(features), chunk_size):
+            chunk_features = features[i:i+chunk_size]
+            fc = ee.FeatureCollection(chunk_features)
+            
+            print(f"[CanopyHeight] Submitting chunk {i//chunk_size + 1} to GEE...", flush=True)
+            # Reduce: mean canopy height per block
+            reduced = canopy_img.reduceRegions(
+                collection=fc,
+                reducer=ee.Reducer.mean(),
+                scale=10,
+                tileScale=4,
+            )
+
+            # Fetch results
+            results = reduced.getInfo()
+            
+            for feat in results["features"]:
+                props = feat["properties"]
+                height = props.get("mean")
+                if height is None:
+                    height = 0.0
+                records.append({
+                    "block_id": props["block_id"],
+                    "canopy_height_m": round(float(height), 2),
+                })
+            print(f"[CanopyHeight] Fetched chunk {i//chunk_size + 1}, accumulated {len(records)} results.", flush=True)
 
         logger.info(
             "[CanopyHeight] Successfully fetched canopy height from GEE "

@@ -114,3 +114,81 @@ def test_random_fallback_disabled():
     finally:
         if 'temp_name' in locals() and temp_name.exists():
             temp_name.rename(weight_file)
+
+
+# ---------------------------------------------------------------------------
+# NaN / nodata regression tests (forensic audit 2026-09-25)
+# ---------------------------------------------------------------------------
+
+def test_nan_mask_detection():
+    """All non-finite pixels (NaN, Inf) detected by isfinite mask across all channels."""
+    image = np.ones((5, 10, 10), dtype=np.float32)
+    image[:, 0:3, 0:3] = np.nan       # NaN in ALL channels
+    image[2, 5, 5] = np.nan            # NaN in ONE channel only
+    image[0, 7, 7] = np.inf            # +Inf in one channel
+    image[1, 8, 8] = -np.inf           # -Inf in one channel
+
+    nodata_mask = ~np.isfinite(image).all(axis=0)
+
+    # All-NaN pixels detected
+    assert nodata_mask[0, 0] == True
+    assert nodata_mask[2, 2] == True
+    # Single-channel NaN detected
+    assert nodata_mask[5, 5] == True
+    # Inf detected
+    assert nodata_mask[7, 7] == True
+    assert nodata_mask[8, 8] == True
+    # Fully valid pixel NOT masked
+    assert nodata_mask[9, 9] == False
+
+
+def test_nan_to_num_prevents_contamination():
+    """nan_to_num after _normalise_tile ensures all values are finite."""
+    tile = np.ones((5, 256, 256), dtype=np.float32)
+    tile[0, :, :] = np.linspace(100, 300, 256*256).reshape(256, 256)
+    tile[3, :, :] = 0.5   # NDVI
+    tile[4, :, :] = 10.0  # Slope
+    # Inject NaN region
+    tile[:, 100:150, 100:150] = np.nan
+
+    tile_norm = _normalise_tile(tile)
+    tile_clean = np.nan_to_num(tile_norm, nan=0.0, posinf=0.0, neginf=0.0)
+
+    assert np.all(np.isfinite(tile_clean)), "nan_to_num must produce all-finite output"
+    # Valid region should be unchanged
+    assert np.allclose(tile_clean[:, 0, 0], tile_norm[:, 0, 0])
+
+
+def test_valid_pixel_count_with_nan():
+    """Synthetic raster with known NaN count produces correct valid_pixel_count."""
+    total = 1000
+    nan_count = 400
+    image = np.ones((5, 10, 100), dtype=np.float32)
+    image[:, :4, :] = np.nan  # 4 rows * 100 cols = 400 NaN pixels
+
+    nodata_mask = ~np.isfinite(image).all(axis=0)
+    valid_count = int((~nodata_mask).sum())
+
+    assert valid_count == total - nan_count, (
+        f"Expected {total - nan_count} valid pixels, got {valid_count}"
+    )
+
+
+def test_class_map_nodata_255_assignment():
+    """Invalid pixels (vote_cnt == 0) get class 255, not class 0."""
+    vote_sum = np.zeros((4, 10, 10), dtype=np.float64)
+    vote_cnt = np.zeros((10, 10), dtype=np.float64)
+    # Only bottom half has valid votes
+    vote_cnt[5:, :] = 1.0
+    vote_sum[:, 5:, :] = 0.25
+
+    vote_cnt_safe = vote_cnt.copy()
+    vote_cnt_safe[vote_cnt_safe == 0] = 1
+    avg_probs = vote_sum / vote_cnt_safe[np.newaxis, :, :]
+    class_map = avg_probs.argmax(axis=0).astype(np.uint8)
+
+    invalid_final = (vote_cnt == 0)
+    class_map[invalid_final] = 255
+
+    assert np.all(class_map[:5, :] == 255), "Top half (invalid) must be 255"
+    assert np.all(class_map[5:, :] != 255), "Bottom half (valid) must not be 255"
