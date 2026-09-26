@@ -1,0 +1,13 @@
+{
+    "production_artifacts": {
+        "pn_grid": "pune_pn_grid_250m_2026.geojson",
+        "factors": "pune_factors_5309_production_2026.csv",
+        "factors_manifest": "pune_factors_5309_production_2026_manifest.json",
+        "eligibility": "pune_uehi_scoring_eligibility_2026.csv",
+        "eligibility_qa": "pune_uehi_scoring_eligibility_2026_QA.json",
+        "population": "pune_population_R2025A_2024_PN_250m.csv",
+        "population_qa": "pune_population_R2025A_2024_PN_250m_QA.json",
+        "pm25": "pune_pm25_acag_v6gl03_jan_mar_2024_250m_UNMASKED.tif",
+        "frozen_unet": "pune_unet_segmentation_FROZEN_2026.tif"
+    }
+}

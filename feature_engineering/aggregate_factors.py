@@ -219,69 +219,173 @@ def aggregate_temperature_to_blocks(temp_tif, block_idx_arr, num_blocks):
         "temperature_completeness_fraction": comp
     })
 
-def aggregate_pm25_to_blocks(pm25_tif, block_idx_arr, num_blocks):
+def aggregate_pm25_to_pn_blocks(pm25_tif, blocks_gdf):
+    """
+    Direct-index PM2.5 aggregator.
+    Maps exactly 1 PN cell to 1 PM2.5 cell without area dilution or rasterization.
+    """
     with rasterio.open(pm25_tif) as src:
+        prof = src.profile
         data = src.read(1)
         nodata = src.nodata
         
-    valid_mask = (block_idx_arr >= 0) & (~np.isnan(data))
-    if nodata is not None:
-        valid_mask &= (data != nodata)
+        if prof['crs'] != "EPSG:32643" and prof['crs'] != blocks_gdf.crs:
+            raise ValueError(f"CRS mismatch in PM2.5 raster: {prof['crs']} != EPSG:32643")
         
-    bidx = block_idx_arr[valid_mask]
-    valid_data = data[valid_mask]
-    
-    s_pm25 = np.bincount(bidx, weights=valid_data, minlength=num_blocks)
-    c_pm25 = np.bincount(bidx, minlength=num_blocks)
-    t_cnt = np.bincount(block_idx_arr[block_idx_arr >= 0], minlength=num_blocks)
-    
-    with np.errstate(divide='ignore', invalid='ignore'):
-        pm25_mean = np.where(c_pm25 > 0, s_pm25 / c_pm25, np.nan)
-        comp = np.where(t_cnt > 0, c_pm25 / t_cnt, 0.0)
+        if not (np.isclose(src.res[0], 250.0) and np.isclose(src.res[1], 250.0)):
+            raise ValueError(f"Resolution mismatch in PM2.5 raster: Expected 250m, got {src.res[0]}x{src.res[1]}")
+            
+        gdf_bounds = blocks_gdf.total_bounds
+        if not (np.isclose(gdf_bounds[0], src.bounds.left, atol=1e-2) and
+                np.isclose(gdf_bounds[1], src.bounds.bottom, atol=1e-2) and
+                np.isclose(gdf_bounds[2], src.bounds.right, atol=1e-2) and
+                np.isclose(gdf_bounds[3], src.bounds.top, atol=1e-2)):
+            raise ValueError("PM2.5 raster bounds do not exactly match PN grid bounds")
+            
+        pm25_vals = []
+        counts = []
+        comps = []
         
+        # PN grid retains full cell geometries, so centroid maps perfectly to the cell center
+        centroids = blocks_gdf.centroid
+        
+        for pt in centroids:
+            row, col = src.index(pt.x, pt.y)
+            if 0 <= row < src.height and 0 <= col < src.width:
+                val = data[row, col]
+                if nodata is not None and val == nodata:
+                    val = np.nan
+                if np.isnan(val):
+                    pm25_vals.append(np.nan)
+                    counts.append(0)
+                    comps.append(0.0)
+                else:
+                    pm25_vals.append(float(val))
+                    counts.append(1)
+                    comps.append(1.0)
+            else:
+                pm25_vals.append(np.nan)
+                counts.append(0)
+                comps.append(0.0)
+                
     return pd.DataFrame({
-        "pm25": pm25_mean,
-        "pm25_valid_pixel_count": c_pm25,
-        "pm25_completeness_fraction": comp
-    })
+        "pm25": pm25_vals,
+        "pm25_valid_pixel_count": counts,
+        "pm25_completeness_fraction": comps
+    }, index=blocks_gdf.index)
 
 
-def aggregate_population_to_blocks(pop_tif, block_idx_arr, num_blocks):
+def aggregate_population_to_blocks(pop_tif, blocks_gdf, boundary_gdf=None):
     """
-    Aggregate population to blocks using raster-based zonal SUM.
-
-    WorldPop provides population COUNT per pixel (total persons in that cell).
-    The correct aggregation for count data is SUM: total population within
-    each block is the sum of all population-count pixels falling in the block.
-
-    This replaces the previous vectorize-then-intersect approach which had
-    a methodological bug (rasterio.features.shapes merges same-value adjacent
-    pixels, corrupting area weighting).
+    Aggregate population to blocks using area-weighted extensive-variable allocation.
+    
+    For every valid WorldPop 100m source cell:
+    1. Construct its actual source-cell polygon.
+    2. Transform source geometry to EPSG:32643.
+    3. Intersect it with the authoritative Pune boundary (if provided).
+    4. Intersect the Pune-clipped source geometry with each PN 250m block.
+    5. Apportion population according to geometric area fraction.
     """
     with rasterio.open(pop_tif) as src:
         data = src.read(1)
         nodata = src.nodata
+        transform = src.transform
+        crs = src.crs
 
-    valid_mask = (block_idx_arr >= 0) & (~np.isnan(data))
+    valid_mask = ~np.isnan(data)
     if nodata is not None:
         valid_mask &= (data != nodata)
 
-    bidx = block_idx_arr[valid_mask]
-    valid_data = data[valid_mask]
+    rows, cols = np.where(valid_mask)
+    vals = data[valid_mask]
+    
+    if len(vals) == 0:
+        res_df = pd.DataFrame(index=blocks_gdf.index)
+        res_df["population_exposure"] = np.nan
+        res_df["population_source_cell_count"] = 0
+        res_df["population_source_valid_area_m2"] = 0.0
+        res_df["population_completeness_fraction"] = 0.0
+        return res_df
 
-    # SUM population count per block (WorldPop = count per pixel)
-    s_pop = np.bincount(bidx, weights=valid_data, minlength=num_blocks)
-    c_pop = np.bincount(bidx, minlength=num_blocks)
-    t_cnt = np.bincount(block_idx_arr[block_idx_arr >= 0], minlength=num_blocks)
+    # 1. Construct actual source-cell polygon
+    from rasterio.transform import xy
+    x_min, y_max = rasterio.transform.xy(transform, rows, cols, offset='ul')
+    x_max, y_min = rasterio.transform.xy(transform, rows, cols, offset='lr')
+    
+    polygons = [shapely.geometry.box(xm, ym, xM, yM) for xm, ym, xM, yM in zip(x_min, y_min, x_max, y_max)]
+    
+    source_gdf = gpd.GeoDataFrame({
+        'pop': vals,
+        'cell_id': np.arange(len(vals))
+    }, geometry=polygons, crs=crs)
 
-    with np.errstate(divide='ignore', invalid='ignore'):
-        comp = np.where(t_cnt > 0, c_pop / t_cnt, 0.0)
+    # 2. Transform source geometry to EPSG:32643
+    if source_gdf.crs != "EPSG:32643":
+        source_gdf = source_gdf.to_crs("EPSG:32643")
+        
+    source_gdf['source_area'] = source_gdf.geometry.area
 
-    return pd.DataFrame({
-        "population_exposure": np.where(c_pop > 0, s_pop, np.nan),
-        "population_source_cell_count": c_pop,
-        "population_completeness_fraction": comp
-    })
+    # 3. Intersect it with the authoritative boundary
+    if boundary_gdf is not None:
+        if boundary_gdf.crs != "EPSG:32643":
+            boundary_gdf = boundary_gdf.to_crs("EPSG:32643")
+        source_gdf = gpd.clip(source_gdf, boundary_gdf)
+        source_gdf = source_gdf[source_gdf.geom_type.isin(['Polygon', 'MultiPolygon'])]
+        
+    # 4. Intersect the source geometry with each PN 250m block
+    if blocks_gdf.crs != "EPSG:32643":
+        blocks_gdf = blocks_gdf.to_crs("EPSG:32643")
+        
+    intersect_gdf = gpd.overlay(source_gdf, blocks_gdf[['block_id', 'geometry']], how='intersection')
+    
+    # 5. Apportion population
+    intersect_gdf['intersect_area'] = intersect_gdf.geometry.area
+    
+    valid_intersect = intersect_gdf[intersect_gdf['source_area'] > 0].copy()
+    valid_intersect['allocated_pop'] = valid_intersect['pop'] * (valid_intersect['intersect_area'] / valid_intersect['source_area'])
+    
+    # 6. Sum allocated population for every PN block
+    grouped = valid_intersect.groupby('block_id').agg(
+        population_exposure=('allocated_pop', 'sum'),
+        population_source_cell_count=('cell_id', 'nunique'),
+        population_source_valid_area_m2=('intersect_area', 'sum')
+    )
+    
+    block_areas = blocks_gdf.set_index('block_id').geometry.area
+    
+    res_df = pd.DataFrame(index=blocks_gdf.index)
+    res_df['block_id'] = blocks_gdf['block_id'].values
+    res_df = res_df.join(grouped, on='block_id')
+    
+    res_df['population_exposure'] = res_df['population_exposure'].fillna(0.0)
+    res_df['population_source_cell_count'] = res_df['population_source_cell_count'].fillna(0).astype(int)
+    res_df['population_source_valid_area_m2'] = res_df['population_source_valid_area_m2'].fillna(0.0)
+    
+    # Calculate boundary intersection area for completeness
+    if boundary_gdf is not None:
+        grid_bound_intersect = gpd.overlay(blocks_gdf[['block_id', 'geometry']], boundary_gdf[['geometry']], how='intersection')
+        grid_bound_intersect['boundary_intersection_area_m2'] = grid_bound_intersect.geometry.area
+        bound_areas = grid_bound_intersect.groupby('block_id')['boundary_intersection_area_m2'].sum()
+    else:
+        bound_areas = blocks_gdf.set_index('block_id').geometry.area
+        bound_areas.name = 'boundary_intersection_area_m2'
+    
+    res_df = res_df.join(bound_areas, on='block_id')
+    res_df['boundary_intersection_area_m2'] = res_df['boundary_intersection_area_m2'].fillna(0.0)
+    
+    res_df['population_completeness_fraction'] = np.where(
+        res_df['boundary_intersection_area_m2'] > 0,
+        res_df['population_source_valid_area_m2'] / res_df['boundary_intersection_area_m2'],
+        0.0
+    )
+    
+    out_cols = [
+        "population_exposure", 
+        "population_source_cell_count", 
+        "population_source_valid_area_m2", 
+        "population_completeness_fraction"
+    ]
+    return res_df[out_cols]
 
 import uuid
 import subprocess
@@ -329,7 +433,7 @@ def _get_raster_provenance(filepath):
             "content_sha256": "unknown"
         }
 
-def aggregate_all_factors(blocks_gdf, seg_tif, bldg_tif, road_tif, union_tif, ndvi_tif, temp_tif, pop_tif, pm25_tif, model_checksums="unknown"):
+def aggregate_all_factors(blocks_gdf, seg_tif, bldg_tif, road_tif, union_tif, ndvi_tif, temp_tif, pop_tif, pm25_tif, boundary_gdf=None, model_checksums="unknown"):
     # Preload unet prof to validate all other factor grids on production path
     with rasterio.open(seg_tif) as su:
         unet_data = su.read(1)
@@ -340,8 +444,6 @@ def aggregate_all_factors(blocks_gdf, seg_tif, bldg_tif, road_tif, union_tif, nd
     validate_grid(union_tif, unet_prof)
     validate_grid(ndvi_tif, unet_prof)
     validate_grid(temp_tif, unet_prof)
-    if pm25_tif:
-        validate_grid(pm25_tif, unet_prof)
     
     with rasterio.open(bldg_tif) as sb, rasterio.open(road_tif) as sr, rasterio.open(union_tif) as sunion:
         bldg_data = sb.read(1)
@@ -364,12 +466,11 @@ def aggregate_all_factors(blocks_gdf, seg_tif, bldg_tif, road_tif, union_tif, nd
     df_temp = aggregate_temperature_to_blocks(temp_tif, block_idx_arr, num_blocks)
     df_temp.index = blocks_gdf.index
     
-    df_pop = aggregate_population_to_blocks(pop_tif, block_idx_arr, num_blocks)
+    df_pop = aggregate_population_to_blocks(pop_tif, blocks_gdf, boundary_gdf)
     df_pop.index = blocks_gdf.index
     
     if pm25_tif:
-        df_pm25 = aggregate_pm25_to_blocks(pm25_tif, block_idx_arr, num_blocks)
-        df_pm25.index = blocks_gdf.index
+        df_pm25 = aggregate_pm25_to_pn_blocks(pm25_tif, blocks_gdf)
     else:
         df_pm25 = pd.DataFrame({
             'pm25': np.nan,
@@ -414,5 +515,17 @@ def aggregate_all_factors(blocks_gdf, seg_tif, bldg_tif, road_tif, union_tif, nd
     }
     if pm25_tif:
         manifest["inputs"]["pm25"] = _get_raster_provenance(pm25_tif)
+        manifest["inputs"]["pm25"].update({
+            "source": "ACAG/WUSTL V6.GL.03",
+            "temporal_period": "Jan-Mar 2024",
+            "source_resolution": "0.01 degree (~1.1 km)",
+            "computational_grid": "UEHIS PN 250m",
+            "resampling": "bilinear",
+            "effective_information_resolution": "coarser than 250m",
+            "boundary_mask": "NOT applied to PM2.5 raster",
+            "aggregation": "direct 1:1 PN-cell lookup",
+            "intensive_variable": True,
+            "area_dilution": False
+        })
     
     return final_df, manifest

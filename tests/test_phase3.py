@@ -161,15 +161,15 @@ def test_population_conservation(tmp_path):
     ) as dst:
         dst.write(pop_data, 1)
         
-    # Dummy block index array mimicking two blocks splitting the raster vertically
-    block_idx_arr = np.array([
-        [0, 0, 1, 1],
-        [0, 0, 1, 1],
-        [0, 0, 1, 1],
-        [0, 0, 1, 1]
-    ], dtype=np.int32)
+    from shapely.geometry import box
+    import geopandas as gpd
     
-    df_pop = aggregate_population_to_blocks(str(pop_tif), block_idx_arr, num_blocks=2)
+    # Dummy block mimicking two blocks splitting the raster vertically
+    b_left = box(0, 0, 20, 40)
+    b_right = box(20, 0, 40, 40)
+    blocks_gdf = gpd.GeoDataFrame({'block_id': [0, 1]}, geometry=[b_left, b_right], crs="EPSG:32643")
+    
+    df_pop = aggregate_population_to_blocks(str(pop_tif), blocks_gdf)
     
     # Block 0 has 8 pixels * 10 = 80
     assert df_pop.iloc[0]["population_exposure"] == 80.0
@@ -190,3 +190,192 @@ def test_manifest_contains_model_hash():
     import inspect
     sig = inspect.signature(aggregate_all_factors)
     assert "model_checksums" in sig.parameters, "aggregate_all_factors must accept model_checksums"
+
+def test_pm25_fixed_weight_and_sum(tmp_path):
+    """TEST 1: PM2.5 fixed weight == 0.02 and all weights sum to 1.0."""
+    from run_phase3 import calculate_weights
+    # Create small deterministic DF
+    df = pd.DataFrame({
+        "ndvi": [0.1, 0.5, 0.9],
+        "tree_density": [10, 50, 90],
+        "pm25": [15.0, 35.0, 55.0],
+        "temperature": [30, 35, 40],
+        "impervious_surfaces": [0.1, 0.5, 0.9],
+        "population_exposure": [100, 500, 1000]
+    })
+    factor_cols = ["ndvi", "tree_density", "pm25", "temperature", "impervious_surfaces", "population_exposure"]
+    ew = calculate_weights(df, factor_cols, is_offline_dev=False)
+    
+    assert ew["pm25"] == pytest.approx(0.02)
+    other_sum = sum(ew[c] for c in factor_cols if c != "pm25")
+    assert other_sum == pytest.approx(0.98)
+    total_sum = sum(ew.values())
+    assert total_sum == pytest.approx(1.0)
+
+def test_negative_ndvi():
+    """TEST 2: Negative NDVI doesn't fail entropy calculation."""
+    from run_phase3 import calculate_weights
+    df = pd.DataFrame({
+        "ndvi": [-0.1, 0.5, 0.9], # Negative NDVI
+        "tree_density": [10, 50, 90],
+        "pm25": [15.0, 35.0, 55.0],
+        "temperature": [30, 35, 40],
+        "impervious_surfaces": [0.1, 0.5, 0.9],
+        "population_exposure": [100, 500, 1000]
+    })
+    factor_cols = ["ndvi", "tree_density", "pm25", "temperature", "impervious_surfaces", "population_exposure"]
+    ew = calculate_weights(df, factor_cols, is_offline_dev=False)
+    assert ew["ndvi"] > 0
+    assert np.isfinite(ew["ndvi"])
+
+def test_missing_scorable_factor_hard_failure(tmp_path):
+    """TEST 3 & TEST 9: Missing scorable factor causes hard failure. Do not impute."""
+    from run_phase3 import validate_factor_data
+    df = pd.DataFrame({
+        "block_id": ["A", "B"],
+        "ndvi": [0.5, 0.6],
+        "tree_density": [10, 20],
+        "pm25": [30, 40],
+        "temperature": [35, np.nan], # missing data!
+        "impervious_surfaces": [0.1, 0.2],
+        "population_exposure": [100, 200]
+    })
+    factor_cols = ["ndvi", "tree_density", "pm25", "temperature", "impervious_surfaces", "population_exposure"]
+    
+    with pytest.raises(RuntimeError, match="Missing factor data for scorable blocks. Do not impute."):
+        validate_factor_data(df, factor_cols, is_offline_dev=False)
+
+def test_non_finite_scorable_factor():
+    """TEST 4: Non-finite scorable factor causes hard failure."""
+    from run_phase3 import validate_factor_data
+    df = pd.DataFrame({
+        "block_id": ["A", "B"],
+        "ndvi": [0.5, 0.6],
+        "tree_density": [10, 20],
+        "pm25": [30, 40],
+        "temperature": [35, np.inf], # non-finite
+        "impervious_surfaces": [0.1, 0.2],
+        "population_exposure": [100, 200]
+    })
+    factor_cols = ["ndvi", "tree_density", "pm25", "temperature", "impervious_surfaces", "population_exposure"]
+    
+    with pytest.raises(RuntimeError, match="Missing factor data for scorable blocks."):
+        validate_factor_data(df, factor_cols, is_offline_dev=False)
+
+def test_missing_eligibility_hard_failure():
+    """TEST 5: Missing eligibility causes a hard failure (via validate='one_to_one')."""
+    from run_phase3 import merge_eligibility
+    df = pd.DataFrame({"block_id": ["A", "B", "C"]}) # Factor has C
+    eligibility = pd.DataFrame({"block_id": ["A", "B"], "score_status": ["scorable", "scorable"]}) # Eligibility missing C
+    
+    with pytest.raises(RuntimeError, match="Eligibility merge failed"):
+        merge_eligibility(df, eligibility)
+
+def test_block_id_cross_validation(tmp_path):
+    """TEST 6: Block-ID cross-validation detects mismatched IDs."""
+    from utils.validate_production import validate_production_artifacts
+    
+    data_dir = tmp_path / "UEHIS_Production_2026"
+    data_dir.mkdir()
+    
+    pd.DataFrame({"block_id": ["A", "B"]}).to_csv(data_dir / "pune_factors.csv", index=False)
+    pd.DataFrame({"block_id": ["A", "C"]}).to_csv(data_dir / "pune_eligibility.csv", index=False)
+    
+    with open(data_dir / "pune_grid.geojson", "w") as f:
+        json.dump({"features": [{"properties": {"block_id": "A"}}, {"properties": {"block_id": "B"}}]}, f)
+        
+    config = {
+        "production_artifacts": {
+            "factors": "pune_factors.csv",
+            "eligibility": "pune_eligibility.csv",
+            "pn_grid": "pune_grid.geojson"
+        }
+    }
+    
+    config_dir = tmp_path / "configs"
+    config_dir.mkdir()
+    config_path = config_dir / "production_2026.json"
+    with open(config_path, "w") as f:
+        json.dump(config, f)
+        
+    with pytest.raises(RuntimeError, match="Validation FAILED"):
+        validate_production_artifacts(data_dir=data_dir, config_path=config_path, raise_on_error=True)
+
+def test_excluded_block_preservation():
+    """TEST 7: Excluded blocks are preserved in output assembly."""
+    from run_phase3 import assemble_output
+    df_scoring = pd.DataFrame({
+        "block_id": ["A", "B"],
+        "ndvi": [0.5, 0.6],
+        "uehi_score": [80, 90],
+        "risk_level": ["Low", "Low"]
+    })
+    df_excluded = pd.DataFrame({
+        "block_id": ["C"],
+        "ndvi": [0.1],
+        "uehi_score": [999], # Should be wiped
+        "risk_level": ["Invalid"] # Should be wiped
+    })
+    
+    final_df = assemble_output(df_scoring, df_excluded)
+    assert len(final_df) == 3
+    excluded_row = final_df[final_df["block_id"] == "C"].iloc[0]
+    assert excluded_row["ndvi"] == 0.1
+    assert pd.isna(excluded_row["uehi_score"])
+    assert pd.isna(excluded_row["risk_level"])
+
+def test_final_output_row_counts():
+    """TEST 8: Output contains 5309 rows, 5298 scorable, 11 excluded."""
+    from run_phase3 import assemble_output
+    df_scoring = pd.DataFrame({"block_id": [f"S_{i}" for i in range(5298)]})
+    df_excluded = pd.DataFrame({"block_id": [f"E_{i}" for i in range(11)]})
+    
+    final_df = assemble_output(df_scoring, df_excluded)
+    assert len(final_df) == 5309
+
+def test_manifest_generation_and_shas(tmp_path):
+    """TEST 10 & 11: Manifest generation explicitly hashes input CSVs."""
+    from run_phase3 import generate_manifest_dict
+    import hashlib
+    
+    factors_csv = tmp_path / "f.csv"
+    factors_csv.write_text("dummy_factors")
+    
+    eligibility_csv = tmp_path / "e.csv"
+    eligibility_csv.write_text("dummy_eligibility")
+    
+    out_csv = tmp_path / "out.csv"
+    out_csv.write_text("dummy_out")
+    
+    prod_config = {"factors": "f.csv", "eligibility": "e.csv"}
+    config_path = "configs/prod.json"
+    
+    manifest = generate_manifest_dict(
+        final_df=pd.DataFrame([1,2,3]),
+        df_scoring=pd.DataFrame([1,2]),
+        df_excluded=pd.DataFrame([3]),
+        factor_cols=["ndvi"],
+        ew={"ndvi": 1.0, "pm25": 0.02},
+        factors_config={"ndvi": ("positive", "REAL")},
+        out_path=out_csv,
+        factors_csv=factors_csv,
+        eligibility_csv=eligibility_csv,
+        config_path=config_path,
+        prod_config=prod_config
+    )
+    
+    # Compute manually
+    def sha(p):
+        with open(p, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+            
+    assert manifest["factor_sha256"] == sha(factors_csv)
+    assert manifest["eligibility_sha256"] == sha(eligibility_csv)
+    assert manifest["output_sha256"] == sha(out_csv)
+    assert manifest["total_blocks"] == 3
+    assert manifest["pm25_fixed_weight"] == 0.02
+
+def test_population_exposure_direction():
+    """Verify population_exposure is strictly configured as positive."""
+    from run_phase3 import FACTORS
+    assert FACTORS["population_exposure"][0] == "positive", "population_exposure must be configured as positive"

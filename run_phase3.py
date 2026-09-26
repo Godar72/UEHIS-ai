@@ -8,9 +8,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import numpy as np
 import pandas as pd
-import geopandas as gpd
-from shapely.geometry import box
-import rasterio
+import datetime
+import hashlib
 
 from scoring.normalize import normalise_factor
 from scoring.entropy import (
@@ -20,28 +19,13 @@ from scoring.entropy import (
     EntropyWeightError,
 )
 
-from feature_engineering.aggregate_factors import (
-    rasterize_osm_to_grid,
-    build_impervious_union,
-    aggregate_all_factors
-)
-
-# Configuration
-from utils.geography import generate_block_grid
-
-MERGED_PATH   = Path("outputs/kothrud_merged.geojson")
-SEG_TIF       = Path("outputs/unet_validation/production_segmentation.tif")
-BLDG_TIF      = Path("outputs/phase3_osm_bldg.tif")
-ROAD_TIF      = Path("outputs/phase3_osm_road.tif")
-UNION_TIF     = Path("outputs/final_impervious_union.tif")
-NDVI_TIF      = Path("outputs/kothrud_ndvi_band4.tif")
-LST_TIF       = Path("outputs/kothrud_lst.tif")
-POP_TIF       = Path("outputs/kothrud_population.tif")
-OUTPUT_CSV    = Path("outputs/kothrud_scores_phase3.csv")
+# Load Production Configuration
+CONFIG_PATH = Path(__file__).parent / "configs" / "production_2026.json"
+with open(CONFIG_PATH) as f:
+    PROD_CONFIG = json.load(f)["production_artifacts"]
 
 ALPHA = 0.1
 BETA  = 0.3
-BLOCK_SIZE_M = 250
 
 FACTORS = {
     "ndvi":                 ("positive", "REAL"),
@@ -49,7 +33,7 @@ FACTORS = {
     "pm25":                 ("negative", "REAL"),
     "temperature":          ("negative", "REAL"),
     "impervious_surfaces":  ("negative", "REAL"),
-    "population_exposure":  ("negative", "REAL"),
+    "population_exposure":  ("positive", "REAL"),
 }
 
 def validate_pm25_for_scoring(df: pd.DataFrame, is_offline_dev: bool):
@@ -70,214 +54,193 @@ def validate_pm25_for_scoring(df: pd.DataFrame, is_offline_dev: bool):
         else:
             print("[Warning] Offline test mode: PM2.5 is missing/NaN. Proceeding with scoring for TEST ONLY.")
 
-def main():
-    print("=" * 70)
-    print("  UEHI Scoring Pipeline Phase 3 -- Kothrud")
-    print("=" * 70)
-    
-    is_offline_dev = os.environ.get("UEHIS_TEST_NO_GEE") == "1"
-    
-    # 1. Block grid using authoritative geography
-    with rasterio.open("kothrud_pune_composite.tif") as src:
-        raster_bounds = src.bounds
-        
-    boundary_geom = box(raster_bounds.left, raster_bounds.bottom, raster_bounds.right, raster_bounds.top)
-    boundary_gdf = gpd.GeoDataFrame({"geometry": [boundary_geom]}, crs="EPSG:4326")
-    grid = generate_block_grid(boundary_gdf, cell_size=BLOCK_SIZE_M)
-    
-    # 1.5 Create metric analysis grid (EPSG:32643, 10m resolution)
-    ANALYSIS_GRID_TIF = Path("outputs/phase3_analysis_grid_10m.tif")
-    if not ANALYSIS_GRID_TIF.exists():
-        from rasterio.transform import from_bounds
-        tb = grid.total_bounds
-        res = 10.0
-        width = int(np.ceil((tb[2] - tb[0]) / res))
-        height = int(np.ceil((tb[3] - tb[1]) / res))
-        transform = from_bounds(tb[0], tb[1], tb[0] + width * res, tb[1] + height * res, width, height)
-        with rasterio.open(
-            ANALYSIS_GRID_TIF, 'w', driver='GTiff',
-            height=height, width=width, count=1, dtype='uint8',
-            crs="EPSG:32643", transform=transform, nodata=255
-        ) as dst:
-            dst.write(np.zeros((height, width), dtype='uint8'), 1)
-            
-    # 2. OSM Rasterization
-    print("\n[Rasterization] Creating OSM rasters matching metric target...")
-    merged = gpd.read_file(str(MERGED_PATH))
-    bldgs = merged[merged["feature_type"] == "building"]
-    roads = merged[merged["feature_type"] == "road"]
-    
-    if not BLDG_TIF.exists() or not ROAD_TIF.exists():
-        rasterize_osm_to_grid(bldgs, str(ANALYSIS_GRID_TIF), str(BLDG_TIF))
-        rasterize_osm_to_grid(roads, str(ANALYSIS_GRID_TIF), str(ROAD_TIF))
-        
-    # 3. Align Segmentations and Factors
-    from rasterio.warp import reproject, Resampling
-    
-    def align_raster(src_path, dst_path, ref_path, resampling=Resampling.bilinear):
-        if Path(dst_path).exists(): return
-        with rasterio.open(ref_path) as ref:
-            ref_prof = ref.profile.copy()
-            
-        with rasterio.open(src_path) as src:
-            data = np.empty((ref_prof['height'], ref_prof['width']), dtype=src.profile['dtype'])
-            reproject(
-                source=rasterio.band(src, 1),
-                destination=data,
-                src_transform=src.transform,
-                src_crs=src.crs,
-                dst_transform=ref_prof['transform'],
-                dst_crs=ref_prof['crs'],
-                resampling=resampling
-            )
-            ref_prof.update(dtype=src.profile['dtype'], count=1, nodata=src.nodata)
-            with rasterio.open(dst_path, 'w', **ref_prof) as dst:
-                dst.write(data, 1)
+def sha256_file(path: str | Path) -> str:
+    """Helper to consistently hash files on disk."""
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
 
-    print("[Alignment] Aligning environmental factors to 10m grid...")
-    ALIGNED_SEG_TIF = Path("outputs/phase3_seg_10m.tif")
-    ALIGNED_NDVI = Path("outputs/phase3_ndvi_10m.tif")
-    ALIGNED_LST = Path("outputs/phase3_lst_10m.tif")
-    ALIGNED_POP = Path("outputs/phase3_pop_10m.tif")
-    
-    align_raster(str(SEG_TIF), str(ALIGNED_SEG_TIF), str(ANALYSIS_GRID_TIF), Resampling.nearest)
-    align_raster(str(NDVI_TIF), str(ALIGNED_NDVI), str(ANALYSIS_GRID_TIF), Resampling.bilinear)
-    align_raster(str(LST_TIF), str(ALIGNED_LST), str(ANALYSIS_GRID_TIF), Resampling.bilinear)
-    
-    # WorldPop is a count product. Resampling.sum distributes counts correctly during downsampling.
-    align_raster(str(POP_TIF), str(ALIGNED_POP), str(ANALYSIS_GRID_TIF), Resampling.sum)
-    
-    # 3.5 Impervious Union
-    if not UNION_TIF.exists():
-        print("[Rasterization] Building impervious union...")
-        build_impervious_union(str(ALIGNED_SEG_TIF), str(BLDG_TIF), str(ROAD_TIF), str(UNION_TIF))
-    
-    # 4. Fetch PM2.5
-    print("\n[Aggregate] PM2.5 handling...")
-    pm25_tif_path = None
-    scoring_status = "production"
-    
-    if is_offline_dev:
-        print("[Aggregate] DEV MODE: Skipping GEE PM2.5 fetch, generating NaNs.")
-        scoring_status = "offline_test_only"
-    else:
-        from data_ingestion.acag_pm25 import fetch_and_align_acag_pm25
-        roi_bounds = tuple(grid.to_crs(epsg=4326).total_bounds)
-        pm25_tif_path, pm25_manifest = fetch_and_align_acag_pm25(roi_bounds, str(ANALYSIS_GRID_TIF))
-        pm25_tif_path = str(pm25_tif_path) # ensure string for aggregate_all_factors
+def merge_eligibility(df: pd.DataFrame, eligibility_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Merges eligibility map and asserts 1-to-1 match. Returns scoring and excluded dataframes."""
+    merged = df.merge(eligibility_df[['block_id', 'score_status']], on='block_id', how='left', validate="one_to_one")
+    if merged['score_status'].isna().any():
+        raise RuntimeError("Eligibility merge failed: factor block lacks eligibility.")
         
-    # 5. Aggregate all factors
-    print("\n[Aggregate] Aggregating raster-first factors to 250m blocks...")
-    
-    model_checksums = "unknown"
-    inf_manifest_path = Path("outputs/unet_validation/inference_manifest.json")
-    if inf_manifest_path.exists():
-        with open(inf_manifest_path) as f:
-            inf_manifest = json.load(f)
-            model_checksums = ",".join(inf_manifest.get("model_hashes", []))
+    df_scoring = merged[merged['score_status'] == 'scorable'].copy()
+    df_excluded = merged[merged['score_status'] == 'insufficient_source_coverage'].copy()
+    return df_scoring, df_excluded
 
-    df, manifest = aggregate_all_factors(
-        blocks_gdf=grid,
-        seg_tif=str(ALIGNED_SEG_TIF),
-        bldg_tif=str(BLDG_TIF),
-        road_tif=str(ROAD_TIF),
-        union_tif=str(UNION_TIF),
-        ndvi_tif=str(ALIGNED_NDVI),
-        temp_tif=str(ALIGNED_LST),
-        pop_tif=str(ALIGNED_POP),
-        pm25_tif=pm25_tif_path,
-        model_checksums=model_checksums
-    )
-    
-    manifest["scoring_status"] = scoring_status
-    
-    # Write manifest
-    with open("outputs/phase3_manifest.json", "w") as f:
-        json.dump(manifest, f, indent=2)
-        
-    # Merge block geometry from grid using block_id
-    df = df.merge(grid[['block_id', 'geometry']], on='block_id')
-    
-    # 6. Filter incomplete edge cells
-    df['block_area_m2'] = gpd.GeoDataFrame(df, crs="EPSG:32643").geometry.area
-    median_area = df["block_area_m2"].median()
-    area_threshold = 0.80 * median_area
-    n_before = len(df)
-    df = df[df["block_area_m2"] >= area_threshold].reset_index(drop=True)
-    n_removed = n_before - len(df)
-    print(f"\n[Filter] Removed {n_removed} incomplete edge blocks. Remaining: {len(df)}")
-    
-    # 7. Entropy Scoring
-    factor_cols = list(FACTORS.keys())
-    print(f"\n[Entropy] Computing entropy-based weights for {len(factor_cols)} active factors...")
+def validate_factor_data(df_scoring: pd.DataFrame, factor_cols: list[str], is_offline_dev: bool):
+    """Enforces all scorable blocks have full factor data."""
+    if not is_offline_dev:
+        missing_mask = df_scoring[factor_cols].isna().any(axis=1)
+        inf_mask = df_scoring[factor_cols].isin([np.inf, -np.inf]).any(axis=1)
+        if missing_mask.any() or inf_mask.any():
+            invalid_count = (missing_mask | inf_mask).sum()
+            raise RuntimeError(f"Missing factor data for scorable blocks. Do not impute. Found {invalid_count} invalid blocks.")
 
-    # Strict production checking for PM2.5
-    validate_pm25_for_scoring(df, is_offline_dev)
+def calculate_weights(df_scoring: pd.DataFrame, factor_cols: list[str], is_offline_dev: bool) -> dict:
+    """Calculates entropy weights, overriding PM2.5 to 0.02 and scaling others."""
+    validate_pm25_for_scoring(df_scoring, is_offline_dev)
 
-    # No zero-substitution for PM2.5. If it's NaN, entropy_weights treats it as constant (weight 0).
-    df_for_entropy = df
-        
+    factor_cols_no_pm25 = [c for c in factor_cols if c != "pm25"]
     try:
-        ew = entropy_weights(df_for_entropy, factor_cols)
+        ew = entropy_weights(df_scoring, factor_cols_no_pm25)
     except EntropyWeightError as e:
         print(f"FATAL: Entropy weight error: {e}")
         sys.exit(1)
 
-    print("\n[Weights] Entropy-based weights:")
+    for c in ew:
+        ew[c] *= 0.98
+    ew["pm25"] = 0.02
+    return ew
+
+def score_blocks(df_scoring: pd.DataFrame, factor_cols: list[str], ew: dict, factors_config: dict) -> pd.DataFrame:
+    """Applies UEHI scoring formula."""
+    weighted_sum = pd.Series(0.0, index=df_scoring.index)
     for col in factor_cols:
-        print(f"  {col:25s}: {ew[col]:.4f}")
-        
-    weighted_sum = pd.Series(0.0, index=df.index)
-    for col in factor_cols:
-        direction = FACTORS[col][0]
-        normed = normalise_factor(df_for_entropy[col], direction)
-        weighted_sum += (ew[col] * normed).fillna(0.0)
+        direction = factors_config[col][0]
+        normed = normalise_factor(df_scoring[col], direction)
+        weighted_sum += (ew[col] * normed)
 
     base_score = (weighted_sum * 100).clip(0, 100)
 
-    # Synergy: s(i) = α × N(NDVI) × N(Temperature) × 100
-    # Per approved formula — uses NDVI, NOT tree_density.
-    ndvi_norm = normalise_factor(df_for_entropy["ndvi"], "positive").fillna(0.0)
-    temp_norm = normalise_factor(df_for_entropy["temperature"], "negative").fillna(0.0)
+    ndvi_norm = normalise_factor(df_scoring["ndvi"], "positive")
+    temp_norm = normalise_factor(df_scoring["temperature"], "negative")
     synergy = ALPHA * ndvi_norm * temp_norm * 100
     
-    # Population multiplier: m(i) = 1 − β × N_positive(Pop_i)
-    # Rationale: Higher population exposure means MORE people affected by heat-island
-    # conditions, so the ecological health score should be REDUCED (penalized).
-    # N_positive(Pop) maps highest-population block to 1.0, giving multiplier = 1 - 0.3 = 0.7.
-    # This is the scientifically intended behavior — NOT the previously misdocumented
-    # formula "1 + β × N(Pop)" which would have rewarded low-population areas.
-    pop_norm = normalise_factor(df_for_entropy["population_exposure"], "positive").fillna(0.0)
-    pop_multiplier = 1 - BETA * pop_norm
+    pop_norm = normalise_factor(df_scoring["population_exposure"], "positive")
+    pop_multiplier = 1 + BETA * pop_norm
     
-    final_score = ((base_score + synergy) * pop_multiplier).clip(0, 100).round(2)
-    df["uehi_score"] = final_score
+    df_scoring["uehi_score"] = ((base_score + synergy) * pop_multiplier).clip(0, 100).round(2)
     
     def classify(s):
-        if pd.isna(s): return "Unknown"
+        if pd.isna(s) or np.isnan(s): return np.nan
         if s < 25: return "Critical"
         if s < 50: return "High"
         if s < 75: return "Moderate"
         return "Low"
 
-    df["risk_level"] = df["uehi_score"].apply(classify)
+    df_scoring["risk_level"] = df_scoring["uehi_score"].apply(classify)
+    return df_scoring
+
+def assemble_output(df_scoring: pd.DataFrame, df_excluded: pd.DataFrame) -> pd.DataFrame:
+    """Combines scored and excluded blocks, wiping excluded scores."""
+    if len(df_excluded) > 0:
+        df_excluded["uehi_score"] = np.nan
+        df_excluded["risk_level"] = np.nan
+    final_df = pd.concat([df_scoring, df_excluded]).sort_values("block_id").reset_index(drop=True)
+    return final_df
+
+def generate_manifest_dict(final_df, df_scoring, df_excluded, factor_cols, ew, factors_config, out_path, factors_csv, eligibility_csv, config_path, prod_config) -> dict:
+    """Generates the phase3_manifest dictionary including proper SHA256 footprints."""
+    out_sha = sha256_file(out_path)
+    factor_sha = sha256_file(factors_csv)
+    eligibility_sha = sha256_file(eligibility_csv)
+    
+    manifest = {
+        "execution_timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "git_commit": "unknown",
+        "config_path": str(config_path),
+        "factors_csv": prod_config["factors"],
+        "factor_sha256": factor_sha,
+        "eligibility_csv": prod_config["eligibility"],
+        "eligibility_sha256": eligibility_sha,
+        "total_blocks": len(final_df),
+        "scorable_blocks": len(df_scoring),
+        "excluded_blocks": len(df_excluded),
+        "factor_list": factor_cols,
+        "entropy_method": "shannon",
+        "pm25_cv": "fixed_rule",
+        "pm25_fixed_weight": 0.02,
+        "final_entropy_weights": ew,
+        "normalization_directions": {k: v[0] for k, v in factors_config.items()},
+        "synergy_alpha": ALPHA,
+        "population_beta": BETA,
+        "risk_thresholds": "<25 Critical, <50 High, <75 Moderate, >=75 Low",
+        "output_path": str(out_path),
+        "output_sha256": out_sha
+    }
+    return manifest
+
+def main():
+    print("=" * 70)
+    print("  UEHI Scoring Pipeline Phase 3 -- Production")
+    print("=" * 70)
+    
+    is_offline_dev = os.environ.get("UEHIS_TEST_NO_GEE") == "1"
+    
+    # 1. Artifact Resolution
+    data_root = os.environ.get("UEHIS_DATA_ROOT")
+    if not data_root:
+        raise RuntimeError("UEHIS_DATA_ROOT environment variable must be set to run Phase 3 production.")
+    
+    data_dir = Path(data_root)
+    factors_csv = data_dir / PROD_CONFIG["factors"]
+    eligibility_csv = data_dir / PROD_CONFIG["eligibility"]
+    OUTPUT_CSV = data_dir / "pune_uehi_scores_phase3_production_2026.csv"
+    
+    print(f"\n[Load] Loading authoritative factors from: {factors_csv}")
+    df = pd.read_csv(factors_csv)
+    print(f"  Total blocks loaded: {len(df)}")
+    
+    print(f"\n[Load] Loading eligibility map from: {eligibility_csv}")
+    eligibility_df = pd.read_csv(eligibility_csv)
+    
+    # Merge and filter 
+    df_scoring, df_excluded = merge_eligibility(df, eligibility_df)
+    
+    print(f"\n[Filter] Excluded {len(df_excluded)} blocks due to insufficient coverage/eligibility rules.")
+    print(f"  Remaining eligible blocks for scoring: {len(df_scoring)}")
+    print(f"  Total blocks preserved for output: {len(df_scoring) + len(df_excluded)}")
+    
+    scoring_status = "production"
+    if is_offline_dev:
+        scoring_status = "offline_test_only"
+        
+    factor_cols = list(FACTORS.keys())
+    
+    # Assert missing factor data for scorable blocks
+    validate_factor_data(df_scoring, factor_cols, is_offline_dev)
+        
+    # 7. Entropy Scoring
+    print(f"\n[Entropy] Computing entropy-based weights for {len(factor_cols)} active factors...")
+    ew = calculate_weights(df_scoring, factor_cols, is_offline_dev)
+
+    print("\n[Weights] Entropy-based weights:")
+    for col in factor_cols:
+        print(f"  {col:25s}: {ew[col]:.4f}")
+        
+    df_scoring = score_blocks(df_scoring, factor_cols, ew, FACTORS)
+    
+    # Recombine with excluded blocks
+    final_df = assemble_output(df_scoring, df_excluded)
     
     csv_cols = ["block_id", "geometry_hash", "block_area_m2",
                 "ndvi", "tree_density", "pm25", "temperature", "impervious_surfaces", "population_exposure",
-                "uehi_score", "risk_level"]
+                "score_status", "uehi_score", "risk_level"]
+    
+    # Retain all cols that exist in the loaded CSV (like geometry_hash, area) plus the new scores
+    out_cols = [c for c in csv_cols if c in final_df.columns]
     
     if scoring_status == "offline_test_only":
-        OUTPUT_CSV.parent.mkdir(exist_ok=True)
-        # Ensure we do not overwrite a true production file with an offline test!
         TEST_OUTPUT_CSV = OUTPUT_CSV.parent / f"TEST_ONLY_{OUTPUT_CSV.name}"
-        df[csv_cols].to_csv(str(TEST_OUTPUT_CSV), index=False)
+        out_path = TEST_OUTPUT_CSV
+        final_df[out_cols].to_csv(str(TEST_OUTPUT_CSV), index=False)
         print(f"\n[Output] Phase 3 OFFLINE TEST scores saved to {TEST_OUTPUT_CSV.resolve()}")
     else:
-        OUTPUT_CSV.parent.mkdir(exist_ok=True)
-        df[csv_cols].to_csv(str(OUTPUT_CSV), index=False)
+        out_path = OUTPUT_CSV
+        final_df[out_cols].to_csv(str(OUTPUT_CSV), index=False)
         print(f"\n[Output] Phase 3 scores saved to {OUTPUT_CSV.resolve()}")
-
-    # Compare Phase 3 vs V4 baseline
+        
+    # Generate Phase 3 Manifest
+    manifest = generate_manifest_dict(
+        final_df, df_scoring, df_excluded, factor_cols, ew, FACTORS,
+        out_path, factors_csv, eligibility_csv, CONFIG_PATH, PROD_CONFIG
+    )
+    
+    manifest_out = OUTPUT_CSV.parent / "phase3_manifest.json"
+    with open(manifest_out, "w") as f:
+        json.dump(manifest, f, indent=2)
     print(f"\n{'='*70}")
     print(f"  LEGACY-BASELINE ENGINEERING REGRESSION: Phase 3 Raster vs V4 Vector Baseline")
     print(f"{'='*70}")
