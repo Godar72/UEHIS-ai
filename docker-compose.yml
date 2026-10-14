@@ -13,8 +13,11 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       frontend:
         condition: service_healthy
@@ -28,6 +31,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   # ── Next.js 16 / React 19 Web Application ───────────────────
   frontend:
@@ -63,7 +71,7 @@ services:
       NEXT_PUBLIC_MAPTILER_API_KEY: ${NEXT_PUBLIC_MAPTILER_API_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       GEOAPIFY_API_KEY: ${GEOAPIFY_API_KEY}
-      MAPTILER_API_KEY: ${MAPTILER_API_KEY}
+      MAPTILER_API_KEY: ${MAPTILER_API_KEY:-}
       UEHIS_API_KEY: ${UEHIS_API_KEY}
       AUTH_IP_FLOOD_LIMIT: ${AUTH_IP_FLOOD_LIMIT:-30}
       AUTH_IP_FLOOD_WINDOW_MS: ${AUTH_IP_FLOOD_WINDOW_MS:-60000}
@@ -75,6 +83,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   # ── FastAPI Geospatial Microservice (Python 3.12 + GDAL) ────
   api:
@@ -90,8 +103,12 @@ services:
       - uehis-net
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prod-ca-2021.crt:/etc/ssl/certs/prod-ca-2021.crt:ro
     environment:
       DATABASE_URL: ${DOCKER_DATABASE_URL:-${DATABASE_URL}}
+      PGSSLMODE: ${PGSSLMODE:-verify-full}
+      PGSSLROOTCERT: ${PGSSLROOTCERT:-/etc/ssl/certs/prod-ca-2021.crt}
       GEE_PROJECT_ID: ${GEE_PROJECT_ID:-}
       OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
       UEHIS_API_KEY: ${UEHIS_API_KEY:-}
@@ -103,6 +120,11 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 networks:
   uehis-net:

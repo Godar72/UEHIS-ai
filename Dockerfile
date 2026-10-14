@@ -30,6 +30,13 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # ── Application code ────────────────────────────────────────
 COPY . .
 
+# ── Non-root user configuration ─────────────────────────────
+RUN groupadd -g 1001 uehis \
+    && useradd -u 1001 -g uehis -s /bin/bash -m uehis \
+    && chown -R uehis:uehis /app
+
+USER uehis
+
 # ── Health check ───────────────────────────────────────────
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1

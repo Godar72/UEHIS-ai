@@ -255,7 +255,7 @@ function MapViewComponent({
   const [basemap, setBasemap] = useState<'satellite' | 'light'>('satellite');
   const [imageryError, setImageryError] = useState<string | null>(null);
 
-  const mapTilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY || process.env.MAPTILER_API_KEY;
+  const mapTilerKey = process.env.NEXT_PUBLIC_MAPTILER_API_KEY;
 
   const hybridStyle = `https://api.maptiler.com/maps/hybrid/style.json?key=${mapTilerKey || ''}`;
   const lightStyle = mapTilerKey

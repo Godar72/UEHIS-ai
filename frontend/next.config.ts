@@ -1,25 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  env: {
-    MAPTILER_API_KEY: process.env.MAPTILER_API_KEY,
-  },
+  // MAPTILER_API_KEY is server-only and removed from nextConfig.env to prevent inlining into client bundles.
+  // Client map components strictly use NEXT_PUBLIC_MAPTILER_API_KEY.
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: [
-          // Existing security headers
+          // Security headers
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'X-XSS-Protection', value: '1; mode=block' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
 
-          // HSTS: enforce HTTPS for 1 year, including subdomains
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=31536000; includeSubDomains'
-          },
+          // Note: Strict-Transport-Security (HSTS) is intentionally omitted here for initial deployment.
+          // It will be enabled at the Nginx reverse-proxy tier after Let's Encrypt certificates are verified.
 
           // Content-Security-Policy: built from actual UEHIS application dependencies
           //

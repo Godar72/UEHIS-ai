@@ -1,5 +1,6 @@
 import os
 import json
+import uuid
 from fastapi import APIRouter, Depends, Body, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -7,6 +8,13 @@ from api.database import get_db
 from api.security import verify_internal_api_key
 
 planting_router = APIRouter(prefix="/planting", tags=["planting"])
+
+SCENARIO_MAP = {
+    "100k": "583a8cea-95ea-4909-bd9a-8dbdc3e2a4cd",
+    "250k": "b2d9a3f2-1a4c-4e8d-9b5a-1c8e3f2a7b6d",
+    "500k": "f4a2b1c3-3d5e-4f6a-8b7c-2d9e4f5a6b7c",
+}
+
 
 @planting_router.post("/filter")
 async def filter_planting_units(
@@ -16,13 +24,19 @@ async def filter_planting_units(
 ):
     """
     Spatially filters planting units within a study area geometry for a given scenario.
-    Returns GeoJSON FeatureCollection and summary metrics.
+    Returns GeoJSON FeatureCollection and summary metrics based on the normalized production schema.
     """
     geometry = payload.get("geometry")
-    scenario_id = payload.get("scenario_id")
+    raw_scenario_id = payload.get("scenario_id")
 
-    if not geometry or not scenario_id:
+    if not geometry or not raw_scenario_id:
         raise HTTPException(status_code=400, detail="Missing geometry or scenario_id")
+
+    resolved_id = SCENARIO_MAP.get(str(raw_scenario_id).strip().lower(), str(raw_scenario_id).strip())
+    try:
+        scenario_uuid = str(uuid.UUID(resolved_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid scenario_id UUID")
 
     geom_str = json.dumps(geometry)
 
@@ -34,10 +48,31 @@ async def filter_planting_units(
             SELECT 
                 pu.unit_id,
                 pu.geom,
-                pu.properties
+                b.uehi_score,
+                b.risk_level::text AS risk_level,
+                ca.candidate_category AS candidate_class,
+                ca.ownership_status,
+                ca.utility_status,
+                ca.permission_status,
+                ps.assumption_type AS carbon_assumption_type
             FROM planting_units pu
             JOIN planting_scenario_units psu ON pu.unit_id = psu.unit_id
+            JOIN planting_scenarios ps ON psu.scenario_id = ps.scenario_id
             CROSS JOIN poly
+            LEFT JOIN LATERAL (
+                SELECT b_inner.uehi_score, b_inner.risk_level
+                FROM uehi_blocks b_inner
+                WHERE ST_Intersects(pu.geom, b_inner.geom)
+                ORDER BY ST_Contains(b_inner.geom, pu.geom) DESC, b_inner.block_id ASC
+                LIMIT 1
+            ) b ON true
+            LEFT JOIN LATERAL (
+                SELECT ca_inner.candidate_category, ca_inner.ownership_status, ca_inner.utility_status, ca_inner.permission_status
+                FROM planting_candidate_areas ca_inner
+                WHERE ST_Intersects(pu.geom, ca_inner.geom)
+                ORDER BY ST_Contains(ca_inner.geom, pu.geom) DESC, ca_inner.area_id ASC
+                LIMIT 1
+            ) ca ON true
             WHERE psu.scenario_id = CAST(:scenario_id AS uuid)
               AND ST_Intersects(pu.geom, poly.geom)
         )
@@ -49,26 +84,26 @@ async def filter_planting_units(
                         'type', 'Feature',
                         'geometry', ST_AsGeoJSON(ST_Transform(fu.geom, 4326))::json,
                         'properties', json_build_object(
-                            'planting_unit_id', fu.properties->>'planting_unit_id',
-                            'uehi_score', (fu.properties->>'uehi_score')::numeric,
-                            'risk_level', fu.properties->>'risk_level',
-                            'ownership_status', fu.properties->>'ownership_status',
-                            'utility_status', fu.properties->>'utility_status',
-                            'permission_status', fu.properties->>'planting_permission_status',
-                            'candidate_class', fu.properties->>'candidate_class',
-                            'distance_to_water_m', (fu.properties->>'distance_to_water_m')::numeric,
-                            'carbon_assumption_type', fu.properties->>'carbon_assumption_type'
+                            'planting_unit_id', fu.unit_id::text,
+                            'uehi_score', fu.uehi_score,
+                            'risk_level', fu.risk_level,
+                            'ownership_status', COALESCE(fu.ownership_status, 'unknown'),
+                            'utility_status', COALESCE(fu.utility_status, 'unknown'),
+                            'permission_status', COALESCE(fu.permission_status, 'unknown'),
+                            'candidate_class', COALESCE(fu.candidate_class, 'unknown'),
+                            'distance_to_water_m', null,
+                            'carbon_assumption_type', fu.carbon_assumption_type
                         )
                     )
                 ), '[]'::json)
             ) AS geojson,
             COUNT(*) AS total_units,
-            AVG((fu.properties->>'uehi_score')::numeric) AS mean_uehi
+            AVG(fu.uehi_score) AS mean_uehi
         FROM filtered_units fu;
     """)
 
     try:
-        result = db.execute(query, {"geom": geom_str, "scenario_id": str(scenario_id)}).fetchone()
+        result = db.execute(query, {"geom": geom_str, "scenario_id": scenario_uuid}).fetchone()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
 
@@ -118,3 +153,4 @@ async def filter_planting_units(
             "class_distribution": class_dist
         }
     }
+

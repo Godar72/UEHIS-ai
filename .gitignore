@@ -16,6 +16,8 @@ env/
 # --- Credentials & local config ---
 .env
 .env.*
+*.pem
+*.crt
 
 # --- Large raster datasets ---
 *.tif
