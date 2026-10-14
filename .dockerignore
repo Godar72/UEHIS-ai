@@ -6,4 +6,22 @@ __pycache__/
 .git/
 .pytest_cache/
 *.tif
+!UEHIS_Production_2026/pune_unet_segmentation_FROZEN_2026.tif
 output/
+*.zip
+*.pth
+*.pdf
+*.pptx
+*.png
+frontend/
+supabase/
+archive/
+UEHIS_Production_2026/*
+!UEHIS_Production_2026/pune_unet_segmentation_FROZEN_2026.tif
+UEHIS_training/
+UEHIS\ Code/
+UEHIS_exports/
+outputs/
+scratch/
+brain/
+*.bak

@@ -1,0 +1,311 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: calc(100dvh - 48px - 56px - env(safe-area-inset-bottom, 0px));
+  margin-top: 48px;
+  position: relative;
+  background-color: var(--surface);
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .container {
+    height: calc(100vh - 48px);
+  }
+}
+
+.telemetryBar {
+  background-color: var(--surface-container-high);
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--outline-variant);
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+  flex-shrink: 0;
+}
+
+.telemetryLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.telemetryPulse {
+  width: 8px;
+  height: 8px;
+  background-color: var(--secondary);
+  display: inline-block;
+}
+
+.telemetryRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header {
+  padding: 12px 16px;
+  background-color: var(--surface-container-lowest);
+  border-bottom: 1px solid var(--outline-variant);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+@media (min-width: 1024px) {
+  .header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+  }
+}
+
+.titleArea {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kicker {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--secondary);
+  font-weight: 600;
+}
+
+.title {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+.controlsArea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.scenarioSelector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  padding: 4px 8px;
+}
+
+.selectLabel {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--on-surface-variant);
+}
+
+.select {
+  padding: 4px 8px;
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--outline-variant);
+  border-radius: 0;
+  background-color: var(--surface-container-lowest);
+  color: var(--primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.select:focus {
+  border-color: var(--primary);
+}
+
+.metrics {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px;
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container-high);
+}
+
+.metricLabel {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--outline);
+}
+
+.metricVal {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.clearAreaBtn {
+  padding: 6px 10px;
+  background-color: var(--risk-critical);
+  color: #ffffff;
+  border: none;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.mapLayout {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .mapLayout {
+    flex-direction: row;
+  }
+}
+
+.mapWrapper {
+  flex: 1;
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+.spacingBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  padding: 4px 8px;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 11px;
+}
+
+.authContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: calc(100vh - 48px);
+  margin-top: 48px;
+  background-color: var(--surface);
+  padding: 24px;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+}
+
+.authCard {
+  max-width: 480px;
+  width: 100%;
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.authKicker {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--secondary);
+}
+
+.authTitle {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.authSubtitle {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.authActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.authPrimaryBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.authPrimaryBtn:hover {
+  background-color: #101F43;
+}
+
+.authSecondaryBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  background-color: transparent;
+  color: var(--on-surface);
+  border: 1px solid var(--outline-variant);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.authSecondaryBtn:hover {
+  background-color: var(--surface-container);
+}
+

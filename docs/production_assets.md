@@ -1,6 +1,6 @@
 # UEHIS Production Assets
 
-This document describes the important external/large production assets used by the UEHIS (Urban Eco-Heat Island Scoring) pipeline. These files are intentionally excluded from Git due to their size but are required for full pipeline execution.
+This document describes the important external/large production assets used by the UEHIS (Urban Ecosystem Health Intelligence Scoring) pipeline. These files are intentionally excluded from Git due to their size but are required for full pipeline execution.
 
 ## Boundary & Grid Assets
 

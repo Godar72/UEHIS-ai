@@ -119,75 +119,95 @@ def aggregate_canopy_area_m2_from_raster(
     unet_tif: str | Path,
 ) -> pd.DataFrame:
     """
-    Calculate canopy area from U-Net raster segmentation (class_id == 0).
-    Uses rasterize and bincount for vectorized O(N) aggregation.
+    Calculate canopy area exactly using block-local raster windows.
+    For each block, reads the corresponding window from the raster,
+    extracts exact class 0 polygon footprints, and computes the 
+    intersection area in EPSG:32643.
     """
     unet_path = Path(unet_tif)
     if not unet_path.exists():
         raise FileNotFoundError(f"U-Net raster not found: {unet_path.resolve()}")
 
     import rasterio
-    from rasterio.features import rasterize
+    from rasterio.mask import mask
+    from rasterio.features import shapes, geometry_mask
+    import pyproj
+    from shapely.ops import transform
+    from shapely.geometry import shape
 
-    with rasterio.open(unet_path) as src:
-        unet_data = src.read(1)
-        prof = src.profile
-        nodata = src.nodata if src.nodata is not None else 255
-        pixel_area_m2 = prof['transform'][0] * abs(prof['transform'][4])
-        if prof['crs'].is_geographic:
-            import pyproj
-            from shapely.geometry import box
-            from shapely.ops import transform
-            geom = box(
-                prof['transform'][2], 
-                prof['transform'][5] - abs(prof['transform'][4]),
-                prof['transform'][2] + prof['transform'][0], 
-                prof['transform'][5]
-            )
-            project = pyproj.Transformer.from_crs(prof['crs'], "EPSG:32643", always_xy=True).transform
-            pixel_area_m2 = transform(project, geom).area
-
-    if blocks_gdf.crs != prof['crs']:
-        blocks_gdf = blocks_gdf.to_crs(prof['crs'])
-        
-    shapes_gen = ((geom, idx) for idx, geom in enumerate(blocks_gdf.geometry))
-    try:
-        block_idx_arr = rasterize(
-            shapes_gen, 
-            out_shape=(prof['height'], prof['width']), 
-            transform=prof['transform'], 
-            fill=-1, 
-            dtype=np.int32, 
-            all_touched=False
-        )
-    except ValueError:
-        block_idx_arr = np.full((prof['height'], prof['width']), -1, dtype=np.int32)
-
-    valid_mask = (block_idx_arr >= 0) & (unet_data != nodata)
-    valid_bidx = block_idx_arr[valid_mask]
-    valid_data = unet_data[valid_mask]
-    
-    num_blocks = len(blocks_gdf)
-    c_cnt = np.bincount(valid_bidx[valid_data == CANOPY_CLASS_ID], minlength=num_blocks)
-    v_cnt = np.bincount(valid_bidx, minlength=num_blocks)
-    t_cnt = np.bincount(block_idx_arr[block_idx_arr >= 0], minlength=num_blocks)
-    
-    with np.errstate(divide='ignore', invalid='ignore'):
-        comp = np.where(t_cnt > 0, v_cnt / t_cnt, 0.0)
-
-    canopy_area_m2 = c_cnt * pixel_area_m2
+    if blocks_gdf.crs is None:
+        blocks_gdf = blocks_gdf.set_crs("EPSG:32643")
+    elif blocks_gdf.crs.to_string() != "EPSG:32643":
+        blocks_gdf = blocks_gdf.to_crs("EPSG:32643")
 
     records = []
-    for idx, row in blocks_gdf.iterrows():
-        records.append({
-            "block_id": row["block_id"],
-            "block_area_m2": float(row.geometry.area),
-            "canopy_pixel_count": int(c_cnt[idx]),
-            "canopy_area_m2": float(canopy_area_m2[idx]),
-            "canopy_area_source": CANOPY_AREA_SOURCE_RASTER,
-            "valid_pixel_count": int(v_cnt[idx]),
-            "canopy_completeness": float(comp[idx]),
-        })
+    with rasterio.open(unet_path) as src:
+        nodata = src.nodata if src.nodata is not None else 255
+        raster_crs = src.crs.to_string() if src.crs else "EPSG:4326"
+        
+        if raster_crs != "EPSG:32643":
+            project_to_raster = pyproj.Transformer.from_crs("EPSG:32643", raster_crs, always_xy=True).transform
+            project_to_32643 = pyproj.Transformer.from_crs(raster_crs, "EPSG:32643", always_xy=True).transform
+        else:
+            project_to_raster = None
+            project_to_32643 = None
+        
+        for idx, row in blocks_gdf.iterrows():
+            geom_32643 = row.geometry
+            if project_to_raster:
+                geom_raster = transform(project_to_raster, geom_32643)
+            else:
+                geom_raster = geom_32643
+            
+            try:
+                # Use all_touched=True to ensure we capture any canopy pixel that slightly overlaps
+                out_image, out_transform = mask(src, [geom_raster], crop=True, all_touched=True)
+                
+                # Generate a strict geometry mask to count exactly how many pixels touch the block
+                inside_mask = geometry_mask([geom_raster], out_shape=out_image[0].shape, 
+                                            transform=out_transform, all_touched=True, invert=True)
+                
+                valid_data_mask = (out_image[0] != nodata) & inside_mask
+                canopy_mask = (out_image[0] == CANOPY_CLASS_ID) & inside_mask
+                
+                c_cnt = int(canopy_mask.sum())
+                v_cnt = int(valid_data_mask.sum())
+                t_cnt = int(inside_mask.sum())
+                comp = v_cnt / t_cnt if t_cnt > 0 else 0.0
+                
+                clipped_area = 0.0
+                if c_cnt > 0:
+                    results = (
+                        {"properties": {"val": v}, "geometry": s}
+                        for i, (s, v) in enumerate(
+                            shapes(out_image[0], mask=canopy_mask, transform=out_transform)
+                        )
+                    )
+                    
+                    for r in results:
+                        poly_raster = shape(r["geometry"])
+                        if project_to_32643:
+                            poly_32643 = transform(project_to_32643, poly_raster)
+                        else:
+                            poly_32643 = poly_raster
+                        inter = poly_32643.intersection(geom_32643)
+                        clipped_area += inter.area
+
+            except ValueError:
+                c_cnt = 0
+                v_cnt = 0
+                comp = 0.0
+                clipped_area = 0.0
+                
+            records.append({
+                "block_id": row["block_id"],
+                "block_area_m2": float(geom_32643.area),
+                "canopy_pixel_count": c_cnt,
+                "canopy_area_m2": float(clipped_area),
+                "canopy_area_source": CANOPY_AREA_SOURCE_RASTER,
+                "valid_pixel_count": v_cnt,
+                "canopy_completeness": float(comp),
+            })
 
     return pd.DataFrame(records)
 
@@ -201,16 +221,8 @@ def attach_canopy_area_m2(
 ) -> tuple[pd.DataFrame, str]:
     """
     Add ``canopy_area_m2`` to a block table without modifying UEHI score columns.
-
-    Priority:
-    1. Existing ``canopy_area_m2`` column
-    2. Raster aggregation from U-Net segmentation
-    3. Block-clipped aggregate from merged landcover + block geometries
-    4. ``tree_density × block_area_m2`` from the block scores schema
-
-    Returns
-    -------
-    (dataframe, source_label)
+    
+    For Pune Production: U-Net Raster is the sole source.
     """
     result = blocks_df.copy()
 
@@ -225,15 +237,20 @@ def attach_canopy_area_m2(
         return result, CANOPY_AREA_SOURCE_RASTER
 
     if merged_geojson is not None and blocks_gdf is not None:
+        # Retain for regression testing ONLY
         canopy_df = aggregate_canopy_area_m2_from_merged(blocks_gdf, merged_geojson)
         result = result.merge(canopy_df, on="block_id", how="left")
         result["canopy_area_m2"] = result["canopy_area_m2"].fillna(0.0)
         if result["canopy_area_m2"].isna().any():
             missing = result.loc[result["canopy_area_m2"].isna(), "block_id"].tolist()
-            raise ValueError(
-                f"Canopy area missing for blocks after landcover aggregate: {missing[:5]}"
-            )
+            raise ValueError(f"Canopy area missing for blocks after landcover aggregate: {missing[:5]}")
         return result, CANOPY_AREA_SOURCE_LANDCOVER
 
-    result["canopy_area_m2"] = canopy_area_m2_from_score_columns(result)
-    return result, CANOPY_AREA_SOURCE_SCORES
+    # For Pune production, we MUST fail if no raster was provided
+    # Do not silently fall back to tree_density * block_area
+    import os
+    if os.environ.get("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK") == "1":
+        result["canopy_area_m2"] = canopy_area_m2_from_score_columns(result)
+        return result, CANOPY_AREA_SOURCE_SCORES
+        
+    raise RuntimeError("Pune production requires a valid unet_tif for canopy area. Legacy fallbacks are disabled.")

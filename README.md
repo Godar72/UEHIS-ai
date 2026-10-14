@@ -20,7 +20,7 @@ Extracts pixel-level land-cover classes and derives urban morphology features us
 - Dynamic World land-cover validation
 
 ### Phase 3 · UEHI Scoring (`scoring/`)
-Computes a composite **Urban Eco-Heat Island (UEHI) Score** for each 250 m grid cell by fusing thermal, spectral, and morphological features.
+Computes a composite **Urban Ecosystem Health Intelligence (UEHI) Score** for each 250 m grid cell by fusing thermal, spectral, and morphological features.
 - **Raster-First Pipeline**: Zonal statistics computed directly on 10 m resolution rasters
 - **Entropy Weighting**: Objective, data-driven weight allocation with variance-floor safeguards
 - Temporal and spatial risk classification (Low / Moderate / High / Critical)

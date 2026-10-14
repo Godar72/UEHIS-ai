@@ -1,0 +1,749 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 48px);
+  margin-top: 48px;
+  background-color: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1024px) {
+  .container {
+    padding-bottom: 0;
+  }
+}
+
+.inner {
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+@media (max-width: 640px) {
+  .inner {
+    padding: 16px;
+    gap: 16px;
+  }
+}
+
+/* Header Block */
+.headerBlock {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-radius: 0;
+}
+
+.headerMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kicker {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.statusBadge {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  padding: 2px 8px;
+  background-color: var(--surface-container-high);
+  color: var(--on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  border-radius: 0;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+@media (min-width: 1024px) {
+  .title {
+    font-size: 2.25rem;
+  }
+}
+
+.subtitle {
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+  margin: 0;
+  font-family: var(--font-ibm-plex-mono), monospace;
+}
+
+.advisoryBanner {
+  background-color: var(--surface-container-low);
+  border-left: 3px solid var(--primary);
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.advisoryIcon {
+  color: var(--primary);
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.advisoryContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.advisoryTitle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+}
+
+.advisoryText {
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Parameters & Rules Bar */
+.paramsCard {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-radius: 0;
+}
+
+.paramsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--surface-container);
+  padding-bottom: 12px;
+}
+
+.paramsTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--on-surface-variant);
+}
+
+.specBadge {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.paramsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.paramBox {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.paramLabel {
+  font-size: 0.75rem;
+  color: var(--on-surface-variant);
+  font-weight: 500;
+}
+
+.paramValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+  font-family: var(--font-jetbrains-mono), monospace;
+  margin: 6px 0 2px 0;
+}
+
+.paramValueSecondary {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--secondary);
+  font-family: var(--font-jetbrains-mono), monospace;
+  margin: 6px 0 2px 0;
+}
+
+.paramValueSub {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--on-surface-variant);
+}
+
+.paramFootnote {
+  font-size: 0.625rem;
+  color: var(--outline);
+  font-family: var(--font-ibm-plex-mono), monospace;
+}
+
+.carbonNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--surface-container);
+  padding: 8px 12px;
+  font-size: 0.6875rem;
+  color: var(--on-surface-variant);
+  border-left: 2px solid var(--outline);
+}
+
+/* Scenarios Manifest Grid */
+.manifestSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.manifestHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.manifestTitle {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+}
+
+.manifestCount {
+  font-size: 0.75rem;
+  color: var(--on-surface-variant);
+  font-family: var(--font-ibm-plex-mono), monospace;
+}
+
+.scenariosGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 640px) {
+  .scenariosGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.scenarioCard {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  transition: border-color 0.15s ease;
+}
+
+.scenarioCard:hover {
+  border-color: var(--primary);
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.scenarioBadgeGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.trackPill {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0;
+}
+
+.scenarioCardTitle {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+}
+
+.scenarioTypeTag {
+  background-color: var(--surface-container-high);
+  color: var(--on-surface-variant);
+  font-size: 0.625rem;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  padding: 2px 6px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.cardDescription {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.metricsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background-color: var(--surface-container-low);
+  padding: 12px;
+  border: 1px solid var(--surface-container);
+}
+
+.metricCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metricLabel {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  color: var(--outline);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  letter-spacing: 0.05em;
+}
+
+.metricValue {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-family: var(--font-jetbrains-mono), monospace;
+  color: var(--primary);
+}
+
+.metricValueGreen {
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-family: var(--font-jetbrains-mono), monospace;
+  color: var(--secondary);
+}
+
+.metricSub {
+  font-size: 0.625rem;
+  color: var(--on-surface-variant);
+}
+
+/* Distribution Breakdown section within card */
+.cardBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--surface-container);
+}
+
+.breakdownTitle {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--on-surface-variant);
+}
+
+.breakdownList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.breakdownRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+}
+
+.breakdownLabel {
+  color: var(--on-surface-variant);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.breakdownDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background-color: var(--secondary);
+}
+
+.breakdownValue {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.cardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--surface-container);
+  font-size: 0.75rem;
+}
+
+.targetCount {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.targetCountDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  background-color: var(--secondary);
+}
+
+.trackId {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 0.6875rem;
+}
+
+/* Stress Index Shift Bar Chart */
+.stressChartCard {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-radius: 0;
+}
+
+.chartHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--surface-container);
+  padding-bottom: 12px;
+}
+
+.chartTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+}
+
+.chartSub {
+  font-size: 0.6875rem;
+  color: var(--outline);
+  font-family: var(--font-ibm-plex-mono), monospace;
+}
+
+.chartTracks {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trackRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trackRowMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+}
+
+.trackRowName {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.trackRowScore {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.trackRowScoreGreen {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.barTrack {
+  height: 10px;
+  background-color: var(--surface-container-high);
+  width: 100%;
+  position: relative;
+}
+
+.barFillPrimary {
+  height: 100%;
+  background-color: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.barFillNavy {
+  height: 100%;
+  background-color: var(--surface-tint);
+  transition: width 0.3s ease;
+}
+
+.barFillGreen {
+  height: 100%;
+  background-color: var(--secondary);
+  transition: width 0.3s ease;
+}
+
+/* Comprehensive Data Table */
+.tableSection {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tableTitle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid var(--surface-container);
+}
+
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.dataTable th, .dataTable td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--surface-container);
+}
+
+.dataTable th {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  background-color: var(--surface-container-low);
+  white-space: nowrap;
+}
+
+.dataTable td {
+  font-size: 0.8125rem;
+  color: var(--on-surface);
+}
+
+.dataTable .num {
+  font-family: var(--font-jetbrains-mono), monospace;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dataTable th.num {
+  text-align: right;
+}
+
+.dataTable .strong {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.distList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.distRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  gap: 8px;
+}
+
+.distLabel {
+  color: var(--on-surface-variant);
+}
+
+.distValue {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.loadingCell {
+  text-align: center;
+  color: var(--on-surface-variant);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  padding: 32px !important;
+}
+
+/* Bottom Protocol & CTA Banner */
+.bottomRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 840px) {
+  .bottomRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.protocolBox {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.protocolHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+}
+
+.protocolTitle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.protocolText {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.protocolMeta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  color: var(--on-surface-variant);
+  border-top: 1px solid var(--surface-container);
+  padding-top: 8px;
+}
+
+.ctaCard {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ctaTitle {
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  margin: 0 0 6px 0;
+}
+
+.ctaText {
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.ctaButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  width: fit-content;
+}
+
+.ctaButton:hover {
+  background-color: var(--primary-container);
+}

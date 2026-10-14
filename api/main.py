@@ -1,7 +1,7 @@
 """
 api/main.py
 ───────────
-FastAPI application for the UEHIS Urban Eco-Heat Island Scoring System.
+FastAPI application for the UEHIS Urban Ecosystem Health Intelligence System.
 
 Endpoints
 ---------
@@ -15,12 +15,14 @@ Endpoints
 
 from __future__ import annotations
 
+import os
 import json
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Security
+from fastapi.security.api_key import APIKeyHeader
 from geoalchemy2.functions import ST_AsGeoJSON
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from api.database import get_db, init_db
@@ -33,15 +35,20 @@ from api.models import (
     ScoreResponse,
     UEHIFactors,
 )
+from api.study_area import study_area_router
+from api.tiles import tiles_router
+from api.planting import planting_router
+from api.security import validate_startup_security, verify_internal_api_key
 
 
 # ---------------------------------------------------------------------------
-# Lifespan (create tables on startup)
+# Lifespan (create tables and validate security on startup)
 # ---------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise the database on application startup."""
+    """Validate security settings and initialise the database on application startup."""
+    validate_startup_security()
     try:
         init_db()
         print("[API] Database tables initialised.")
@@ -57,12 +64,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="UEHIS API",
     description=(
-        "Urban Eco-Heat Island Scoring System — "
+        "Urban Ecosystem Health Intelligence System — "
         "query UEHI scores, carbon-sink data, and planting recommendations."
     ),
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.include_router(study_area_router)
+app.include_router(tiles_router)
+app.include_router(planting_router)
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +86,9 @@ def _get_block_or_404(block_id: str, db: Session) -> BlockDB:
     if block is None:
         raise HTTPException(status_code=404, detail=f"Block '{block_id}' not found.")
     return block
+
+# Alias centralized security dependency for backward-compatible route dependencies
+get_api_key = verify_internal_api_key
 
 
 def _block_to_factors(block: BlockDB) -> UEHIFactors:
@@ -107,6 +121,50 @@ def _block_geojson(block: BlockDB, db: Session) -> dict | None:
 async def health_check():
     """Service health check."""
     return HealthResponse()
+
+
+@app.get("/summary", tags=["system"])
+async def get_summary(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
+):
+    """Retrieve immutable baseline summary for Pune 5,309 computational blocks."""
+    uehi_row = db.execute(text("""
+        SELECT 
+            count(*),
+            count(*) FILTER (WHERE is_excluded = false),
+            avg(uehi_score) FILTER (WHERE is_excluded = false)
+        FROM uehi_blocks
+    """)).fetchone()
+    total_blocks, scored_blocks, mean_uehi = uehi_row[0], uehi_row[1], uehi_row[2]
+
+    carbon_row = db.execute(text("""
+        SELECT 
+            sum(standing_carbon_stock),
+            sum(canopy_area_m2),
+            sum(estimated_tree_count),
+            sum(above_ground_biomass_kg),
+            count(*) FILTER (WHERE standing_carbon_stock > 0)
+        FROM carbon_blocks
+    """)).fetchone()
+    total_carbon, canopy_area, tree_count, biomass, carbon_blocks_count = (
+        carbon_row[0], carbon_row[1], carbon_row[2], carbon_row[3], carbon_row[4]
+    )
+
+    return {
+        "uehi": {
+            "total_blocks": total_blocks,
+            "scored_blocks": scored_blocks,
+            "mean_score": float(mean_uehi) if mean_uehi is not None else None
+        },
+        "carbon": {
+            "total_carbon": float(total_carbon) if total_carbon is not None else None,
+            "canopy_area_km2": float(canopy_area) / 1000000.0 if canopy_area is not None else None,
+            "tree_count": float(tree_count) if tree_count is not None else None,
+            "biomass_kg": float(biomass) if biomass is not None else None,
+            "nonzero_blocks": carbon_blocks_count
+        }
+    }
 
 
 @app.get("/blocks", response_model=list[ScoreResponse], tags=["blocks"])
@@ -181,6 +239,7 @@ async def get_block_carbon(block_id: str, db: Session = Depends(get_db)):
 async def create_or_update_block(
     payload: BlockCreate,
     db: Session = Depends(get_db),
+    api_key: str = Depends(get_api_key),
 ):
     """Create a new block or update an existing one (upsert by block_id)."""
     stmt = select(BlockDB).where(BlockDB.block_id == payload.block_id)

@@ -6,7 +6,25 @@ import rasterio
 from rasterio.transform import Affine
 from unittest.mock import patch, MagicMock
 
-from feature_engineering.aggregate_factors import aggregate_pm25_to_blocks
+from feature_engineering.aggregate_factors import aggregate_pm25_to_pn_blocks
+import geopandas as gpd
+from shapely.geometry import box
+
+def create_blocks_gdf(transform, width, height):
+    polygons = []
+    block_ids = []
+    idx = 0
+    for r in range(height):
+        for c in range(width):
+            x0 = transform.c + c * transform.a
+            y0 = transform.f + r * transform.e
+            x1 = x0 + transform.a
+            y1 = y0 + transform.e
+            polygons.append(box(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)))
+            block_ids.append(idx)
+            idx += 1
+    return gpd.GeoDataFrame({'block_id': block_ids}, geometry=polygons, crs='EPSG:32643')
+
 from data_ingestion.acag_pm25 import fetch_and_align_acag_pm25, PM25FetchError
 
 @pytest.fixture
@@ -57,44 +75,39 @@ def synthetic_ref_tif(tmp_path):
         
     return str(tif_path)
 
-def test_aggregate_pm25_to_blocks(synthetic_pm25_tif):
-    """Test G: Block aggregation handles missing data and calculates correct means."""
-    block_idx_arr = np.array([
-        [0, 0, 0],
-        [1, 1, 2]
-    ])
-    num_blocks = 3
+def test_aggregate_pm25_to_pn_blocks(synthetic_pm25_tif):
+    """Test G: Block aggregation maps 1:1 correctly."""
+    transform = Affine.translation(0, 0) * Affine.scale(250, -250)
+    blocks_gdf = create_blocks_gdf(transform, 3, 2)
     
-    df = aggregate_pm25_to_blocks(synthetic_pm25_tif, block_idx_arr, num_blocks)
+    df = aggregate_pm25_to_pn_blocks(synthetic_pm25_tif, blocks_gdf)
     
-    # Block 0 has 10, 20, NaN -> valid: 10, 20 -> mean: 15, count: 2, comp: 2/3
-    assert df.loc[0, "pm25"] == 15.0
-    assert df.loc[0, "pm25_valid_pixel_count"] == 2
-    assert np.isclose(df.loc[0, "pm25_completeness_fraction"], 2/3)
+    assert df.loc[0, "pm25"] == 10.0
+    assert df.loc[0, "pm25_valid_pixel_count"] == 1
     
-    # Block 1 has 40, 50 -> valid: 40, 50 -> mean: 45, count: 2, comp: 2/2
-    assert df.loc[1, "pm25"] == 45.0
-    assert df.loc[1, "pm25_valid_pixel_count"] == 2
-    assert df.loc[1, "pm25_completeness_fraction"] == 1.0
+    assert df.loc[1, "pm25"] == 20.0
     
-    # Block 2 has 60 -> valid: 60 -> mean: 60, count: 1, comp: 1/1
-    assert df.loc[2, "pm25"] == 60.0
-    assert df.loc[2, "pm25_valid_pixel_count"] == 1
-    assert df.loc[2, "pm25_completeness_fraction"] == 1.0
+    assert pd.isna(df.loc[2, "pm25"])
+    assert df.loc[2, "pm25_valid_pixel_count"] == 0
+    
+    assert df.loc[3, "pm25"] == 40.0
+    assert df.loc[4, "pm25"] == 50.0
+    assert df.loc[5, "pm25"] == 60.0
+    assert df.loc[5, "pm25_valid_pixel_count"] == 1
 
 def test_aggregate_pm25_no_valid_data(tmp_path):
     """Test G: No valid pixels produces NaN."""
     tif_path = tmp_path / "test_nan.tif"
     data = np.full((2, 2), np.nan, dtype=np.float32)
-    transform = Affine.identity()
+    transform = Affine.translation(0, 0) * Affine.scale(250, -250)
     with rasterio.open(
         tif_path, 'w', driver='GTiff', height=2, width=2, count=1,
         dtype=data.dtype, crs='EPSG:32643', transform=transform, nodata=np.nan
     ) as dst:
         dst.write(data, 1)
         
-    block_idx = np.array([[0, 0], [0, 0]])
-    df = aggregate_pm25_to_blocks(str(tif_path), block_idx, 1)
+    blocks_gdf = create_blocks_gdf(transform, 2, 2)
+    df = aggregate_pm25_to_pn_blocks(str(tif_path), blocks_gdf)
     
     assert pd.isna(df.loc[0, "pm25"])
     assert df.loc[0, "pm25_valid_pixel_count"] == 0
@@ -118,9 +131,11 @@ def test_fetch_acag_pm25_temporal_validation(mock_export, mock_auth, mock_collec
 
 def test_negative_pm25_handling(synthetic_pm25_tif):
     """Test D: Raw PM2.5 remains raw, no inversion."""
-    block_idx_arr = np.array([[0, 0, 0], [0, 0, 0]])
-    df = aggregate_pm25_to_blocks(synthetic_pm25_tif, block_idx_arr, 1)
-    # The values 10, 20, 40, 50, 60 mean = 36. 
+    transform = Affine.translation(0, 0) * Affine.scale(250, -250)
+    blocks_gdf = create_blocks_gdf(transform, 3, 2)
+    df = aggregate_pm25_to_pn_blocks(synthetic_pm25_tif, blocks_gdf)
+    assert df.loc[0, "pm25"] == 10.0
+
 @patch('data_ingestion.acag_pm25.ee')
 @patch('data_ingestion.acag_pm25.authenticate_gee')
 @patch('data_ingestion.acag_pm25.geemap.ee_export_image')
@@ -203,8 +218,6 @@ def test_fetch_acag_pm25_wrong_months(mock_export, mock_auth, mock_ee, synthetic
 
 def test_zero_and_negative_not_masked(tmp_path):
     """Test: Zero and negative synthetic values are not automatically discarded."""
-    # Create an aligned TIF directly mimicking what fetch_and_align_acag_pm25 outputs 
-    # to ensure zero and negatives survive block aggregation.
     tif_path = tmp_path / "test_zero_neg.tif"
     data = np.array([
         [0.0, -5.0],
@@ -218,12 +231,12 @@ def test_zero_and_negative_not_masked(tmp_path):
     ) as dst:
         dst.write(data, 1)
         
-    block_idx = np.array([[0, 0], [0, 0]])
-    df = aggregate_pm25_to_blocks(str(tif_path), block_idx, 1)
+    blocks_gdf = create_blocks_gdf(transform, 2, 2)
+    df = aggregate_pm25_to_pn_blocks(str(tif_path), blocks_gdf)
     
-    # Values: 0.0, -5.0, 10.0 -> mean is 5.0 / 3 = 1.666...
-    assert np.isclose(df.loc[0, "pm25"], 5.0 / 3.0)
-    assert df.loc[0, "pm25_valid_pixel_count"] == 3
+    assert np.isclose(df.loc[0, "pm25"], 0.0)
+    assert df.loc[0, "pm25_valid_pixel_count"] == 1
+    assert np.isclose(df.loc[1, "pm25"], -5.0)
 
 @patch('data_ingestion.acag_pm25.ee')
 @patch('data_ingestion.acag_pm25.authenticate_gee')
@@ -350,10 +363,10 @@ def test_exact_target_transform_and_bilinear(mock_export, mock_auth, mock_ee, tm
         assert np.isclose(data[0,0], 10.0)
 
 def test_production_aggregation_path():
-    """Test: production aggregation path uses aggregate_pm25_to_blocks."""
+    """Test: production aggregation path uses aggregate_pm25_to_pn_blocks."""
     with open('run_scoring.py', 'r') as f:
         content = f.read()
-        assert 'aggregate_pm25_to_blocks' in content
+        assert 'aggregate_pm25_to_pn_blocks' in content
         assert 'aggregate_raster_zonal_stats(pm25_tif' not in content
 
 @patch('data_ingestion.acag_pm25.ee')

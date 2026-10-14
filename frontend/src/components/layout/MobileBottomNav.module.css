@@ -1,0 +1,183 @@
+.bottomNav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background-color: rgba(250, 249, 244, 0.98);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--surface-container-highest, #d9ddd7);
+  box-shadow: 0 -2px 10px rgba(0, 21, 68, 0.06);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: block;
+}
+
+@media (min-width: 900px) {
+  .bottomNav {
+    display: none !important;
+  }
+}
+
+:global(body[data-account-drawer-open="true"]) .bottomNav {
+  display: none !important;
+}
+
+.navGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: stretch;
+  height: 56px;
+  width: 100%;
+}
+
+.navItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 4px 2px;
+  text-decoration: none;
+  color: var(--on-surface-variant, #65706b);
+  transition: color 0.15s ease, background-color 0.15s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.navItem:hover {
+  color: var(--primary, #001544);
+}
+
+.navItem:focus-visible {
+  outline: 2px solid var(--primary-container, #172b5c);
+  outline-offset: -2px;
+}
+
+.navItemActive {
+  color: var(--primary-container, #172b5c);
+  font-weight: 700;
+}
+
+.navItemActive .navLabel {
+  color: var(--primary-container, #172b5c);
+  font-weight: 700;
+}
+
+.navItemActive .navIcon {
+  color: var(--primary-container, #172b5c);
+  transform: scale(1.05);
+}
+
+.navIcon {
+  font-size: 20px;
+  line-height: 1;
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.navLabel {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* More drawer overlay for secondary mobile navigation */
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(16, 31, 67, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.drawerContent {
+  background-color: var(--surface, #faf9f4);
+  border-top: 2px solid var(--primary-container, #172b5c);
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 24px rgba(0, 21, 68, 0.15);
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--surface-container-highest, #d9ddd7);
+  margin-bottom: 12px;
+}
+
+.drawerTitle {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary, #001544);
+}
+
+.drawerCloseBtn {
+  background: none;
+  border: none;
+  color: var(--on-surface-variant, #65706b);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drawerList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawerLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: var(--surface-container-lowest, #ffffff);
+  border: 1px solid var(--surface-container-highest, #d9ddd7);
+  text-decoration: none;
+  color: var(--on-surface, #1b1c19);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.drawerLink:hover {
+  background-color: var(--surface-container-low, #f5f4ef);
+  border-color: var(--primary-container, #172b5c);
+}
+
+.drawerLinkActive {
+  background-color: var(--primary-container, #172b5c);
+  color: var(--on-primary, #ffffff);
+  border-color: var(--primary-container, #172b5c);
+}
+
+.drawerLinkActive .drawerLinkIcon {
+  color: var(--on-primary, #ffffff);
+}
+
+.drawerLinkIcon {
+  font-size: 18px;
+  color: var(--primary, #001544);
+}

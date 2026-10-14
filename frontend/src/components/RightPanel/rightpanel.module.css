@@ -1,0 +1,384 @@
+.panel {
+  width: 100%;
+  height: 65vh;
+  background-color: var(--surface-container-lowest);
+  border-top: 1px solid var(--outline-variant);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  box-shadow: 0 -4px 16px rgba(0, 21, 68, 0.12);
+}
+
+@media (min-width: 1024px) {
+  .panel {
+    position: relative;
+    width: 380px;
+    height: 100%;
+    border-top: none;
+    border-left: 1px solid var(--outline-variant);
+    box-shadow: -4px 0 16px rgba(0, 21, 68, 0.08);
+    flex-shrink: 0;
+  }
+}
+
+.panelHeader {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.panelHeaderTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.panelHeaderTag {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 10px;
+  background-color: var(--primary-container);
+  color: var(--primary-fixed);
+  padding: 2px 6px;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: var(--on-primary);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease;
+}
+
+.closeBtn:hover {
+  opacity: 0.8;
+}
+
+.stateMessage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--space-lg);
+  color: var(--on-surface-variant);
+  font-size: 13px;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  text-align: center;
+}
+
+.errorText {
+  color: var(--risk-critical);
+  margin-bottom: var(--space-sm);
+  font-weight: 500;
+}
+
+.retryBtn {
+  background-color: var(--primary);
+  border: none;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-weight: 600;
+  color: var(--on-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.blockCard {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.blockCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.blockCardLabel {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--on-surface-variant);
+}
+
+.copyBtn {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 10px;
+  background-color: var(--surface-container-high);
+  color: var(--primary);
+  border: 1px solid var(--outline-variant);
+  padding: 1px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.copyBtn:hover {
+  background-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.blockId {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+.blockMetaGrid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 4px;
+  border-top: 1px solid var(--surface-container-high);
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+}
+
+.scoreCard {
+  background-color: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scoreCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.scoreCardLabel {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--on-surface-variant);
+}
+
+.scoreRow {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.scoreValue {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+
+.scoreDenominator {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+
+.riskBadge {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  color: var(--on-primary);
+}
+
+.progressBarTrack {
+  width: 100%;
+  height: 6px;
+  background-color: var(--surface-container-highest);
+  overflow: hidden;
+  display: flex;
+}
+
+.progressBarFill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.scoreScale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 10px;
+  color: var(--on-surface-variant);
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--surface-container-high);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--on-surface-variant);
+}
+
+.sectionHeadingBadge {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 9px;
+  color: var(--outline);
+}
+
+.dataTable {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dataRow {
+  background-color: var(--surface-container-low);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--surface-container-high);
+}
+
+.dataRowLeft {
+  display: flex;
+  flex-direction: column;
+}
+
+.dataLabel {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--on-surface);
+}
+
+.dataSub {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 10px;
+}
+
+.dataRowRight {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.dataValue {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.dataSource {
+  font-family: var(--font-jetbrains-mono), var(--font-ibm-plex-mono), monospace;
+  font-size: 9px;
+  color: var(--outline);
+}
+
+.carbonNote {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+  line-height: 1.4;
+  background-color: var(--surface-container-low);
+  border-left: 2px solid var(--primary);
+  padding: 8px 10px;
+  margin-top: 6px;
+}
+
+.mobileGripHandle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 4px;
+  background-color: var(--surface-container-lowest);
+  cursor: pointer;
+  touch-action: none;
+}
+
+@media (min-width: 1024px) {
+  .mobileGripHandle {
+    display: none;
+  }
+}
+
+.handleBar {
+  width: 36px;
+  height: 4px;
+  background-color: var(--outline-variant);
+  border-radius: 2px;
+}
+
+.backToMapBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background-color: var(--surface-container-high);
+  color: var(--primary);
+  border: 1px solid var(--outline-variant);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  margin-top: 12px;
+  transition: background-color 0.15s ease;
+}
+
+.backToMapBtn:hover {
+  background-color: var(--surface-container-highest);
+}
+

@@ -1,0 +1,445 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 48px);
+  margin-top: 48px;
+  background-color: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 1024px) {
+  .container {
+    padding-bottom: 0;
+  }
+}
+
+.inner {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+@media (max-width: 640px) {
+  .inner {
+    padding: 16px;
+    gap: 16px;
+  }
+}
+
+/* Document Official Header */
+.docHeader {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-radius: 0;
+}
+
+.headerTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.docRefBadge {
+  background-color: var(--primary-container);
+  color: var(--on-primary);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.revBadge {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.6875rem;
+  color: var(--on-surface-variant);
+  font-weight: 600;
+}
+
+.docTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.2;
+}
+
+@media (min-width: 1024px) {
+  .docTitle {
+    font-size: 2.25rem;
+  }
+}
+
+.docSubtitle {
+  font-size: 0.875rem;
+  color: var(--on-surface);
+  margin: 0;
+  font-weight: 500;
+}
+
+.metaInfoCard {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.metaCol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metaColRight {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+
+.metaLabel {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+  letter-spacing: 0.05em;
+}
+
+.metaValue {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.metaValueDatum {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+/* Toolbar */
+.toolbar {
+  background-color: var(--surface-container);
+  border: 1px solid var(--surface-variant);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 6px 12px;
+  flex: 1;
+}
+
+.searchBox input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.75rem;
+  color: var(--on-surface);
+  outline: none;
+}
+
+.searchBox input::placeholder {
+  color: var(--outline);
+}
+
+.expandBtn {
+  height: 32px;
+  padding: 0 12px;
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.expandBtn:hover {
+  background-color: var(--primary-container);
+}
+
+/* Accordion List */
+.accordionList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionCard {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  transition: border-color 0.15s ease;
+}
+
+.sectionHeader {
+  width: 100%;
+  padding: 16px 20px;
+  text-align: left;
+  background-color: var(--surface-container-low);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: background-color 0.15s ease;
+}
+
+.sectionHeader:hover {
+  background-color: var(--surface-container);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.sectionIndex {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 2px 6px;
+  background-color: var(--surface-container-highest);
+  line-height: 1;
+}
+
+.sectionHeaderTitle {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--primary);
+  display: block;
+}
+
+.sectionHeaderSub {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.6875rem;
+  color: var(--on-surface-variant);
+  display: block;
+  margin-top: 2px;
+}
+
+.arrowIcon {
+  color: var(--primary);
+  transition: transform 0.2s ease;
+}
+
+.arrowOpen {
+  transform: rotate(180deg);
+}
+
+.sectionContent {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-top: 1px solid var(--surface-variant);
+}
+
+/* Content Elements inside sections */
+.statsQuad {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.statQuadBox {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.statQuadLabel {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+
+.statQuadValue {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.statQuadValueGreen {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--secondary);
+}
+
+.statQuadValueRed {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--error);
+}
+
+.textParagraph {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--on-surface);
+  margin: 0;
+}
+
+.calloutNotice {
+  background-color: var(--surface-container-low);
+  border-left: 3px solid var(--primary);
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+}
+
+/* Equations */
+.equationBlock {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  padding: 14px 18px;
+  overflow-x: auto;
+  border-radius: 0;
+}
+
+.equationText {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* List of sensors / factors */
+.itemsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.itemCard {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.itemName {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.itemBadge {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.625rem;
+  padding: 2px 6px;
+  background-color: var(--surface-container-high);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.itemBadgeGreen {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.625rem;
+  padding: 2px 6px;
+  background-color: var(--secondary-container);
+  color: var(--on-secondary-container);
+  font-weight: 600;
+}
+
+.itemDesc {
+  font-size: 0.75rem;
+  color: var(--on-surface-variant);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* Document Provenance Certification Footer */
+.certificationCard {
+  background-color: var(--surface-container-high);
+  border: 1px solid var(--surface-variant);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.certHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+}
+
+.certTitle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.certText {
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.certFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--surface-container-highest);
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.6875rem;
+  color: var(--on-surface-variant);
+}

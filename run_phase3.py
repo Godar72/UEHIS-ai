@@ -33,7 +33,7 @@ FACTORS = {
     "pm25":                 ("negative", "REAL"),
     "temperature":          ("negative", "REAL"),
     "impervious_surfaces":  ("negative", "REAL"),
-    "population_exposure":  ("positive", "REAL"),
+    "population_exposure":  ("negative", "REAL"),
 }
 
 def validate_pm25_for_scoring(df: pd.DataFrame, is_offline_dev: bool):
@@ -109,7 +109,7 @@ def score_blocks(df_scoring: pd.DataFrame, factor_cols: list[str], ew: dict, fac
     synergy = ALPHA * ndvi_norm * temp_norm * 100
     
     pop_norm = normalise_factor(df_scoring["population_exposure"], "positive")
-    pop_multiplier = 1 + BETA * pop_norm
+    pop_multiplier = 1 - BETA * pop_norm
     
     df_scoring["uehi_score"] = ((base_score + synergy) * pop_multiplier).clip(0, 100).round(2)
     

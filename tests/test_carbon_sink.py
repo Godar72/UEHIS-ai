@@ -4,6 +4,9 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import box, Polygon
 import pytest
+import os
+
+os.environ["UEHIS_TEST_NO_GEE"] = "1"
 
 from carbon_sink.canopy_height import (
     fallback_height_from_frac,
@@ -138,6 +141,7 @@ class TestWaterIndependence:
     def test_no_water_required(self, monkeypatch):
         """Compute block CO2 without water columns"""
         monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
         blocks_df = pd.DataFrame({
             "block_id": ["B1"],
             "block_area_m2": [10000.0],
@@ -156,6 +160,7 @@ class TestOutputIntegrity:
     def test_no_mutation(self, monkeypatch):
         """Input dataframe should not be mutated in place"""
         monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
         blocks_df = pd.DataFrame({
             "block_id": ["B1"],
             "block_area_m2": [10000.0],
@@ -172,9 +177,10 @@ class TestOutputIntegrity:
         assert "carbon_stock_tonnes_co2e" in result.columns
 
 class TestLegacyBaseline:
-    def test_legacy_landsat_polygon_baseline(self):
+    def test_legacy_landsat_polygon_baseline(self, monkeypatch):
         """Regression guard for the legacy Landsat pipeline.
         Ensures the original Kothrud baseline remains unmodified."""
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
         from pathlib import Path
         import pandas as pd
         import pytest
@@ -292,25 +298,29 @@ class TestRasterFirstCanopy:
 class TestQAIntegrity:
     def test_duplicate_block_id(self, monkeypatch):
         monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
-        blocks_df = pd.DataFrame({"block_id": ["B1", "B1"], "block_area_m2": [10000, 10000], "canopy_area_m2": [1000, 1000]})
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
+        blocks_df = pd.DataFrame({"block_id": ["B1", "B1"], "block_area_m2": [10000, 10000], "canopy_area_m2": [1000, 1000], "tree_density": [1.0, 1.0]})
         with pytest.raises(ValueError, match="QA FAILED: Duplicate block IDs found"):
             compute_block_co2(blocks_df, allometric_model="urban_generic")
             
     def test_negative_canopy_area(self, monkeypatch):
         monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
-        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [-10]})
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [-10], "tree_density": [1.0]})
         with pytest.raises(ValueError, match="QA FAILED: Negative canopy_area_m2 found."):
             compute_block_co2(blocks_df, allometric_model="urban_generic")
             
     def test_canopy_area_exceeds_block(self, monkeypatch):
         monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
-        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [15000]})
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [15000], "tree_density": [1.0]})
         with pytest.raises(ValueError, match="QA FAILED: canopy_area_m2 exceeds block_area_m2."):
             compute_block_co2(blocks_df, allometric_model="urban_generic")
             
     def test_negative_height(self, monkeypatch):
         monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
-        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [1000], "canopy_frac": [0.5]})
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [1000], "canopy_frac": [0.5], "tree_density": [1.0]})
         import carbon_sink.canopy_height
         monkeypatch.setattr(carbon_sink.canopy_height, "get_canopy_height", lambda df, geo: (pd.DataFrame({"block_id": ["B1"], "canopy_height_m": [-1.0]}), "mocked"))
         
@@ -319,7 +329,8 @@ class TestQAIntegrity:
 
     def test_canopy_fraction_bounds(self, monkeypatch):
         monkeypatch.setenv("ALLOW_UNCALIBRATED_HEIGHT_FALLBACK", "true")
-        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [1000], "canopy_fraction": [1.5]})
+        monkeypatch.setenv("UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK", "1")
+        blocks_df = pd.DataFrame({"block_id": ["B1"], "block_area_m2": [10000], "canopy_area_m2": [1000], "canopy_fraction": [1.5], "tree_density": [1.0]})
         with pytest.raises(ValueError, match="QA FAILED: canopy_fraction outside"):
             compute_block_co2(blocks_df, allometric_model="urban_generic")
 
@@ -344,3 +355,250 @@ class TestModernCarbonValidation:
         assert abs(n_trees.sum() - 181032) < 2
         assert abs(total_agb_kg.sum() - 5145785) < 2
         assert abs(co2_tonnes.sum() - 8867.9) < 0.1
+
+
+class TestPuneProductionArchitecture:
+    def test_rejection_of_legacy_canopy_fallback(self):
+        """Ensure Pune production strictly fails if raster is missing and fallback is not explicitly allowed."""
+        from carbon_sink.canopy_area import attach_canopy_area_m2
+        import pandas as pd
+        import pytest
+        import os
+        
+        blocks_df = pd.DataFrame({"block_id": ["A"], "tree_density": [1.0], "block_area_m2": [100.0]})
+        
+        # Make sure fallback env is NOT set
+        if "UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK" in os.environ:
+            del os.environ["UEHIS_ALLOW_LEGACY_CANOPY_FALLBACK"]
+            
+        with pytest.raises(RuntimeError, match="Pune production requires a valid unet_tif"):
+            attach_canopy_area_m2(blocks_df)
+            
+    def test_gee_chunking_logic(self, monkeypatch):
+        """Ensure chunk size defaults to 500 and chunks correctly."""
+        import carbon_sink.canopy_height
+        import ee
+        
+        features_sent = []
+        
+        class MockFeatureCollection:
+            def __init__(self, f):
+                self.f = f
+                
+        class MockFCResult:
+            def getInfo(self):
+                return {"features": []}
+                
+        class MockImage:
+            def reduceRegions(self, collection, reducer, scale, tileScale):
+                features_sent.append(len(collection.f))
+                return MockFCResult()
+                
+        monkeypatch.setenv("UEHIS_TEST_NO_GEE", "0")
+        
+        import sys
+        mock_ee = type("MockEE", (), {
+            "Image": lambda x: MockImage(),
+            "FeatureCollection": MockFeatureCollection,
+            "Feature": lambda g, p: p,
+            "Geometry": type("MockGeometry", (), {"Polygon": lambda *a, **k: None}),
+            "Reducer": type("MockReducer", (), {"mean": lambda: None})
+        })
+        sys.modules['ee'] = mock_ee
+        
+        import carbon_sink.canopy_height
+        
+        # also mock authenticate_gee
+        monkeypatch.setattr(carbon_sink.canopy_height, "authenticate_gee", lambda: None, raising=False)
+        # Because authenticate_gee is in data_ingestion.sentinel
+        import sys
+        sys.modules['data_ingestion.sentinel'] = type("MockDI", (), {"authenticate_gee": lambda: None})
+        
+        from shapely.geometry import box
+        import pandas as pd
+        
+        # 5309 blocks
+        blocks_df = pd.DataFrame({"block_id": [f"B_{i}" for i in range(5309)]})
+        blocks_df["geometry"] = [box(0,0,1,1) for _ in range(5309)]
+        
+        carbon_sink.canopy_height.fetch_canopy_height_ee(blocks_df)
+        
+        assert len(features_sent) == 11
+        assert sum(features_sent) == 5309
+        assert features_sent[0] == 500
+        assert features_sent[-1] == 309
+
+    def test_authoritative_pn_grid_loading(self, tmp_path):
+        """Verify authoritative grid requirements: 5309 blocks, unique IDs, EPSG:32643."""
+        from run_carbon_sequestration import load_and_validate_pn_grid
+        import geopandas as gpd
+        from shapely.geometry import box
+        import pytest
+        
+        # Create a mock valid GeoJSON
+        valid_gdf = gpd.GeoDataFrame({
+            "block_id": [f"B_{i}" for i in range(5309)],
+            "block_area_m2": [62500.0] * 5309,
+            "boundary_intersection_area_m2": [62500.0] * 5309,
+            "boundary_coverage_fraction": [1.0] * 5309,
+            "geometry": [box(0, 0, 250, 250)] * 5309
+        }, crs="EPSG:32643")
+        
+        valid_path = tmp_path / "valid.geojson"
+        valid_gdf.to_file(valid_path, driver="GeoJSON")
+        
+        # 1. Should load successfully
+        loaded = load_and_validate_pn_grid(valid_path)
+        assert len(loaded) == 5309
+        
+        # 2. Wrong row count fails
+        invalid_gdf = valid_gdf.iloc[:5308]
+        invalid_path = tmp_path / "invalid_rows.geojson"
+        invalid_gdf.to_file(invalid_path, driver="GeoJSON")
+        with pytest.raises(RuntimeError, match="exactly 5,309 blocks"):
+            load_and_validate_pn_grid(invalid_path)
+            
+        # 3. Duplicate block IDs fail
+        dup_gdf = valid_gdf.copy()
+        dup_gdf.loc[0, "block_id"] = "B_1"
+        dup_path = tmp_path / "dup.geojson"
+        dup_gdf.to_file(dup_path, driver="GeoJSON")
+        with pytest.raises(RuntimeError, match="unique block IDs"):
+            load_and_validate_pn_grid(dup_path)
+            
+        # 4. Wrong CRS fails
+        crs_gdf = valid_gdf.copy().to_crs("EPSG:4326")
+        crs_path = tmp_path / "crs.geojson"
+        crs_gdf.to_file(crs_path, driver="GeoJSON")
+        with pytest.raises(RuntimeError, match="EPSG:32643"):
+            load_and_validate_pn_grid(crs_path)
+            
+        # 5. Missing required boundary columns fails
+        missing_col_gdf = valid_gdf.copy().drop(columns=["boundary_intersection_area_m2"])
+        missing_path = tmp_path / "missing.geojson"
+        missing_col_gdf.to_file(missing_path, driver="GeoJSON")
+        with pytest.raises(RuntimeError, match="missing required column"):
+            load_and_validate_pn_grid(missing_path)
+
+        # 6. Wrong area fails
+        area_gdf = valid_gdf.copy()
+        area_gdf.loc[0, "block_area_m2"] = 1000.0
+        area_path = tmp_path / "area.geojson"
+        area_gdf.to_file(area_path, driver="GeoJSON")
+        with pytest.raises(RuntimeError, match="exactly 62500"):
+            load_and_validate_pn_grid(area_path)
+            
+        # 7. Real production grid test (if available)
+        import os
+        from pathlib import Path
+        data_root = os.environ.get("UEHIS_DATA_ROOT")
+        if data_root:
+            prod_grid_path = Path(data_root) / "pune_pn_grid_250m_2026.geojson"
+            if prod_grid_path.exists():
+                prod_gdf = load_and_validate_pn_grid(prod_grid_path)
+                assert len(prod_gdf) == 5309
+                assert prod_gdf.crs.to_string() == "EPSG:32643"
+
+    def test_canopy_pixel_count_propagation(self):
+        """Verify canopy_pixel_count is retained from raster through to enriched output."""
+        import pandas as pd
+        import geopandas as gpd
+        from shapely.geometry import box
+        from carbon_sink.canopy_area import attach_canopy_area_m2
+        import rasterio
+        from rasterio.transform import Affine
+        import numpy as np
+        import tempfile
+        
+        with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as tmp:
+            tif_path = tmp.name
+            
+        try:
+            data = np.full((10, 10), 0, dtype=np.uint8) # Class 0 = canopy
+            transform = Affine.translation(0, 10) * Affine.scale(1, -1)
+            with rasterio.open(tif_path, 'w', driver='GTiff', height=10, width=10, count=1, dtype=data.dtype, crs='EPSG:32643', transform=transform, nodata=255) as dst:
+                dst.write(data, 1)
+                
+            blocks_gdf = gpd.GeoDataFrame({
+                "block_id": ["B1"],
+                "geometry": [box(0, 0, 10, 10)]
+            }, crs='EPSG:32643')
+            
+            blocks_df = pd.DataFrame({"block_id": ["B1"]})
+            
+            result, source = attach_canopy_area_m2(blocks_df, unet_tif=tif_path, blocks_gdf=blocks_gdf)
+            
+            assert "canopy_pixel_count" in result.columns
+            assert result["canopy_pixel_count"].iloc[0] == 100
+        finally:
+            import os
+            os.remove(tif_path)
+            
+    def test_required_carbon_output_fields(self):
+        """Verify the required output fields are specified in new_cols."""
+        import ast
+        with open("run_carbon_sequestration.py", "r") as f:
+            content = f.read()
+            
+        assert '"canopy_pixel_count"' in content
+        assert '"canopy_area_m2"' in content
+        assert '"canopy_height_m"' in content
+        assert '"carbon_stock_tonnes_co2e"' in content
+        assert '"agb_kg"' in content
+        assert '"n_trees_est"' in content
+        assert '"allometric_model"' in content
+
+    def test_canopy_area_invariant_and_regression(self):
+        """Test physical bound invariant and specific 13-block regression."""
+        import os
+        from pathlib import Path
+        import pandas as pd
+        import geopandas as gpd
+        import pytest
+        from carbon_sink.canopy_area import attach_canopy_area_m2
+        
+        data_root = os.environ.get("UEHIS_DATA_ROOT")
+        if not data_root:
+            pytest.skip("UEHIS_DATA_ROOT not set, skipping production regression test.")
+            
+        data_root = Path(data_root)
+        pn_grid = data_root / "pune_pn_grid_250m_2026.geojson"
+        unet_tif = data_root / "pune_unet_segmentation_FROZEN_2026.tif"
+        scores = data_root / "pune_uehi_scores_phase3_production_2026.csv"
+        
+        if not pn_grid.exists() or not unet_tif.exists() or not scores.exists():
+            pytest.skip("Production artifacts missing.")
+            
+        gdf = gpd.read_file(pn_grid)
+        gdf["block_area_m2"] = gdf.geometry.area
+        df = pd.read_csv(scores)
+        
+        violating_ids = [
+            "PN_371500_2049250", "PN_371500_2049500", "PN_371750_2049250",
+            "PN_372000_2049000", "PN_372000_2049250", "PN_372250_2048000",
+            "PN_372750_2047750", "PN_375250_2048750", "PN_379000_2052250",
+            "PN_379500_2050500", "PN_379500_2052000", "PN_379750_2052250",
+            "PN_381750_2052500"
+        ]
+        
+        subset_gdf = gdf[gdf["block_id"].isin(violating_ids)].copy()
+        subset_df = df[df["block_id"].isin(violating_ids)].copy()
+        
+        res, _ = attach_canopy_area_m2(subset_df, unet_tif=unet_tif, blocks_gdf=subset_gdf)
+        
+        res = res.merge(subset_gdf[["block_id", "boundary_intersection_area_m2"]], on="block_id")
+        
+        for _, row in res.iterrows():
+            area = row["canopy_area_m2"]
+            block_area = row["block_area_m2"]
+            intersect = row["boundary_intersection_area_m2"]
+            
+            # Invariant: <= boundary_intersection_area_m2 + epsilon
+            assert area <= intersect + 1e-6, f"Canopy {area} exceeds intersection {intersect} for {row['block_id']}"
+            
+            # Invariant: <= block_area_m2
+            assert area <= block_area + 1e-6, f"Canopy {area} exceeds block {block_area} for {row['block_id']}"
+            
+            # Fraction <= 1
+            frac = area / max(block_area, 1.0)
+            assert frac <= 1.0 + 1e-6, f"Canopy fraction {frac} > 1.0 for {row['block_id']}"

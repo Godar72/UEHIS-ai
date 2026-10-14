@@ -17,7 +17,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://uehis:uehis@localhost:5432/uehis",
+    "postgresql+psycopg2://uehis:uehis@localhost:5432/uehis",
 )
 
 engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)

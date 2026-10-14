@@ -82,23 +82,11 @@ def fetch_canopy_height_ee(
     blocks_df: pd.DataFrame,
     block_geometries: list | None = None,
 ) -> pd.DataFrame | None:
-    """
-    Attempt to fetch mean canopy height per block from GEE.
+    import os
+    if os.environ.get("UEHIS_TEST_NO_GEE") == "1":
+        logger.info("[CanopyHeight] UEHIS_TEST_NO_GEE is set. Bypassing GEE.")
+        return None
 
-    Parameters
-    ----------
-    blocks_df : pd.DataFrame
-        Must contain ``block_id`` column.
-    block_geometries : list[shapely.geometry.Polygon] | None
-        Block polygon geometries (EPSG:4326).  If *None*, tries to read
-        from a ``geometry`` column on *blocks_df*.
-
-    Returns
-    -------
-    pd.DataFrame | None
-        DataFrame with ``block_id``, ``canopy_height_m`` columns, or
-        *None* if GEE is unavailable.
-    """
     try:
         import ee  # noqa: F811
         from data_ingestion.sentinel import authenticate_gee
@@ -111,10 +99,7 @@ def fetch_canopy_height_ee(
 
     # Authenticate
     try:
-        import os
-        if os.environ.get("UEHIS_TEST_NO_GEE") == "1":
-            logger.info("[CanopyHeight] UEHIS_TEST_NO_GEE is set. Bypassing GEE.")
-            return None
+
         authenticate_gee()
     except Exception as exc:
         logger.warning(
@@ -145,7 +130,7 @@ def fetch_canopy_height_ee(
             features.append(feat)
 
         # Batch process in chunks to prevent GEE timeouts
-        chunk_size = 10
+        chunk_size = int(os.environ.get("UEHIS_GEE_CHUNK_SIZE", "500"))
         records = []
         for i in range(0, len(features), chunk_size):
             chunk_features = features[i:i+chunk_size]

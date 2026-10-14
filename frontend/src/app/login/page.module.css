@@ -1,0 +1,196 @@
+.container {
+  min-height: calc(100vh - 48px);
+  margin-top: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--surface);
+  padding: 24px;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+}
+
+.authCard {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  border-radius: 0;
+  width: 100%;
+  max-width: 440px;
+  padding: 36px 32px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.brandHeader {
+  margin-bottom: 28px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.classificationBadge {
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  background-color: var(--primary-container);
+  color: var(--on-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 16px;
+}
+
+.title {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0 0 6px 0;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  font-size: 0.8125rem;
+  color: var(--on-surface-variant);
+  margin: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.error {
+  background-color: var(--error-container);
+  color: var(--on-error-container);
+  border-left: 3px solid var(--error);
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  font-family: var(--font-ibm-plex-mono), monospace;
+}
+
+.inputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--on-surface-variant);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-weight: 600;
+}
+
+.input {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-variant);
+  color: var(--on-surface);
+  padding: 10px 14px;
+  border-radius: 0;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background-color: var(--surface-container-lowest);
+}
+
+.submitBtn {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  border: none;
+  padding: 12px;
+  border-radius: 0;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background-color: var(--primary-container);
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.securityNote {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--surface-container);
+  text-align: center;
+  font-size: 0.6875rem;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  color: var(--on-surface-variant);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 16px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--surface-variant);
+}
+
+.dividerText {
+  padding: 0 12px;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--on-surface-variant);
+}
+
+.footerLinks {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.footerLink {
+  color: var(--primary-container);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+  color: var(--primary);
+}
+
+.successNotice {
+  background-color: var(--color-green-pale);
+  color: var(--color-green-dark);
+  border-left: 3px solid var(--color-uehis-green);
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  line-height: 1.4;
+}
+

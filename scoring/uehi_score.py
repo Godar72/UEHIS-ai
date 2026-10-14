@@ -1,7 +1,7 @@
 """
 scoring/uehi_score.py
 ─────────────────────
-6-factor Urban Eco-Heat Island (UEHI) scoring engine.
+6-factor Urban Ecosystem Health (UEHI) scoring engine.
 
 Reads factor weights and directions from ``uehi_config.json``, normalises
 each indicator column, computes the weighted sum, and scales to 0–100.

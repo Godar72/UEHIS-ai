@@ -200,16 +200,12 @@ def main():
         pm25_prov_temporal = "unknown"
     else:
         from data_ingestion.acag_pm25 import fetch_and_align_acag_pm25
-        from feature_engineering.aggregate_factors import _rasterize_blocks, aggregate_pm25_to_blocks
+        from feature_engineering.aggregate_factors import aggregate_pm25_to_pn_blocks
         roi_bounds = tuple(grid.to_crs(epsg=4326).total_bounds)
         pm25_tif, pm25_manifest = fetch_and_align_acag_pm25(roi_bounds, str(COMPOSITE_TIF))
         
-        with rasterio.open(pm25_tif) as src:
-            pm25_prof = src.profile
-        block_idx_arr = _rasterize_blocks(grid, pm25_prof)
-        pm25_df = aggregate_pm25_to_blocks(pm25_tif, block_idx_arr, len(grid))
+        pm25_df = aggregate_pm25_to_pn_blocks(pm25_tif, grid)
         pm25_series = pm25_df["pm25"]
-        pm25_series.index = grid.index
         
         pm25_prov_source = "ACAG_V6GL03_SatPM25"
         pm25_prov_temporal = pm25_manifest.get("seasonal_aggregation_rule", "unknown")

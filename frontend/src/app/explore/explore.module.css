@@ -1,0 +1,24 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 48px - 56px - env(safe-area-inset-bottom, 0px));
+  margin-top: 48px;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--surface, #faf9f4);
+}
+
+@media (min-width: 900px) {
+  .layout {
+    height: calc(100vh - 48px);
+  }
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}

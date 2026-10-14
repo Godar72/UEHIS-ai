@@ -27,30 +27,59 @@ from utils.geography import generate_block_grid
 from shapely.geometry import box
 
 # ── Configuration (override via env for other Pune study areas) ───────────
-SCORES_CSV = Path(os.environ.get("UEHIS_SCORES_CSV", "outputs/TEST_ONLY_kothrud_scores_phase3.csv"))
-MERGED_GEOJSON = Path(
-    os.environ.get("UEHIS_MERGED_GEOJSON", "outputs/kothrud_merged.geojson")
-)
-COMPOSITE_TIF = Path(
-    os.environ.get("UEHIS_COMPOSITE_TIF", "kothrud_pune_composite.tif")
-)
-UNET_TIF = Path(
-    os.environ.get("UEHIS_UNET_TIF", "outputs/phase3_seg_10m.tif")
-)
-CARBON_OUTPUT_CSV = Path(
-    os.environ.get("UEHIS_CARBON_OUTPUT_CSV", "outputs/unet_raster_production.csv")
-)
+DATA_ROOT = Path(os.environ.get("UEHIS_DATA_ROOT", "."))
+SCORES_CSV = Path(os.environ.get("UEHIS_SCORES_CSV", DATA_ROOT / "outputs/pune_phase3_output.csv"))
+PN_GRID_GEOJSON = Path(os.environ.get("UEHIS_PN_GRID_GEOJSON", DATA_ROOT / "pune_pn_grid_250m_2026.geojson"))
+UNET_TIF = Path(os.environ.get("UEHIS_UNET_TIF", DATA_ROOT / "pune_unet_segmentation_FROZEN_2026.tif"))
+CARBON_OUTPUT_CSV = Path(os.environ.get("UEHIS_CARBON_OUTPUT_CSV", DATA_ROOT / "outputs/pune_carbon_production.csv"))
 RECOMMENDATIONS_CSV = Path(
     os.environ.get(
         "UEHIS_PLANTING_RECOMMENDATIONS_CSV",
-        "outputs/unet_raster_planting_recommendations.csv",
+        DATA_ROOT / "outputs/pune_planting_recommendations.csv",
     )
 )
 
 
+def load_and_validate_pn_grid(geojson_path: Path | str) -> gpd.GeoDataFrame:
+    """Load and strictly validate the Pune Phase 4 production grid."""
+    geojson_path = Path(geojson_path)
+    if not geojson_path.exists():
+        raise RuntimeError(f"Authoritative PN grid not found: {geojson_path}")
+        
+    blocks_gdf = gpd.read_file(geojson_path)
+    if "block_id" not in blocks_gdf.columns:
+        raise RuntimeError("PN grid missing 'block_id' column.")
+    
+    if len(blocks_gdf) != 5309:
+        raise RuntimeError(f"PN grid must have exactly 5,309 blocks. Found: {len(blocks_gdf)}")
+        
+    if blocks_gdf["block_id"].duplicated().any():
+        raise RuntimeError("PN grid must have unique block IDs.")
+        
+    if blocks_gdf.crs is None or blocks_gdf.crs.to_string() != "EPSG:32643":
+        raise RuntimeError(f"PN grid must be EPSG:32643. Found: {blocks_gdf.crs}")
+        
+    if not (blocks_gdf.geom_type == "Polygon").all() and not (blocks_gdf.geom_type == "MultiPolygon").all():
+        # Specifically requirement says "Polygon geometries"
+        if not blocks_gdf.geom_type.isin(["Polygon", "MultiPolygon"]).all():
+            raise RuntimeError("PN grid must contain only Polygon geometries.")
+            
+    required_cols = ["block_area_m2", "boundary_intersection_area_m2", "boundary_coverage_fraction"]
+    for c in required_cols:
+        if c not in blocks_gdf.columns:
+            raise RuntimeError(f"PN grid missing required column: {c}")
+            
+    # Verify block area is exactly 62500
+    import numpy as np
+    if not np.isclose(blocks_gdf["block_area_m2"], 62500.0).all():
+        raise RuntimeError("PN grid block_area_m2 must be exactly 62500 for every cell.")
+            
+    return blocks_gdf
+
+
 def main():
     print("=" * 65)
-    print("  Carbon Sequestration & Planting Recommender -- Kothrud, Pune")
+    print("  Carbon Sequestration & Planting Recommender -- Pune Production")
     print("=" * 65)
 
     # ── 1. Load existing scores ───────────────────────────────────────
@@ -70,6 +99,7 @@ def main():
 
     # Columns that compute_block_co2 will produce
     new_cols = [
+        "canopy_pixel_count", "valid_pixel_count", "canopy_completeness",
         "canopy_area_m2", "canopy_area_source",
         "canopy_height_m", "canopy_height_source", "n_trees_est",
         "agb_kg", "carbon_stock_tonnes_co2e", "carbon_tons_sequestered",
@@ -81,26 +111,17 @@ def main():
         if col in scores.columns:
             scores = scores.drop(columns=[col])
 
-    blocks_gdf = None
-    merged_path = MERGED_GEOJSON if MERGED_GEOJSON.exists() else None
     unet_path = UNET_TIF if UNET_TIF.exists() else None
     
-    if COMPOSITE_TIF.exists():
-        import rasterio
-
-        with rasterio.open(str(COMPOSITE_TIF)) as src:
-            raster_bounds = src.bounds
-            
-        boundary_geom = box(raster_bounds.left, raster_bounds.bottom, raster_bounds.right, raster_bounds.top)
-        boundary_gdf = gpd.GeoDataFrame({"geometry": [boundary_geom]}, crs="EPSG:4326")
-        
-        grid = generate_block_grid(boundary_gdf)
-        blocks_gdf = grid.merge(scores[["block_id"]], on="block_id", how="inner")
+    # Load authoritative PN grid directly
+    blocks_gdf = load_and_validate_pn_grid(PN_GRID_GEOJSON)
+    
+    # Make sure we only keep the matching block_ids in the scores
+    blocks_gdf = blocks_gdf.merge(scores[["block_id"]], on="block_id", how="inner")
 
     enriched = compute_block_co2(
         scores,
         unet_tif=unet_path,
-        merged_geojson=merged_path,
         blocks_gdf=blocks_gdf,
     )
 
@@ -172,17 +193,10 @@ def main():
 
     # ── 4. Run planting recommender ──────────────────────────────────
     print("\n" + "-" * 65)
-    print("  Step 2: Planting Site Recommendations")
+    print("  Step 2: Planting Site Recommendations (SKIPPED)")
     print("-" * 65)
 
-    recommendations = recommend_planting_sites(
-        blocks_df=merged,
-        max_canopy_frac=0.15,
-        max_imperv_frac=0.80,
-        target_canopy_frac=0.30,
-        top_n=10,
-        output_path=str(RECOMMENDATIONS_CSV),
-    )
+    recommendations = pd.DataFrame()
 
     # ── 5. Summary ───────────────────────────────────────────────────
     print("\n" + "=" * 65)
@@ -195,14 +209,10 @@ def main():
           f"{merged['canopy_height_source'].iloc[0]}")
     print(f"  Carbon model source     : "
           f"{merged['carbon_model_source'].iloc[0]}")
-    print(f"  Recommendations         : {len(recommendations)} blocks")
-    if not recommendations.empty:
-        print(f"  Additional stock potential: "
-              f"{recommendations['additional_stock_co2e'].sum():.4f} tonnes")
+    print(f"  Recommendations         : SKIPPED")
     print(f"  NOTE: Carbon stock = standing biomass CO2e, not annual sequestration.")
     print(f"\n  Files written:")
     print(f"    {CARBON_OUTPUT_CSV.resolve()}")
-    print(f"    {RECOMMENDATIONS_CSV.resolve()}")
     print("\nDone.")
 
 

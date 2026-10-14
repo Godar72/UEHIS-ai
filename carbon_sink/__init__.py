@@ -22,9 +22,9 @@ from carbon_sink.canopy_height import (
     carbon_from_canopy_params,
 )
 from carbon_sink.optimizer import (
-    OptimizationResult,
-    optimize_planting_sites,
-    budget_sweep,
+    generate_planting_units,
+    score_planting_units,
+    optimize_planting_budget,
 )
 from carbon_sink.planting_recommender import (
     recommend_planting_sites,
@@ -50,9 +50,9 @@ __all__ = [
     "fallback_height_from_frac",
     "carbon_from_canopy_params",
     # optimizer
-    "OptimizationResult",
-    "optimize_planting_sites",
-    "budget_sweep",
+    "generate_planting_units",
+    "score_planting_units",
+    "optimize_planting_budget",
     # planting recommender
     "recommend_planting_sites",
 ]

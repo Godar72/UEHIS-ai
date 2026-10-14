@@ -1,0 +1,320 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 48px);
+  margin-top: 48px;
+  background-color: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+}
+
+.heroSection {
+  background-color: var(--surface-container-low);
+  border-bottom: 1px solid var(--surface-variant);
+  padding: 32px 24px;
+}
+
+.heroInner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.badgeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.badgePrimary {
+  background-color: var(--primary-container);
+  color: var(--on-primary);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.badgeMuted {
+  background-color: var(--surface-container-highest);
+  color: var(--on-surface-variant);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  padding: 2px 8px;
+}
+
+.badgeGreen {
+  background-color: var(--secondary-fixed);
+  color: var(--on-secondary-fixed-variant);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 8px;
+}
+
+.heroTitle {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.heroSubtitle {
+  font-size: 1rem;
+  color: var(--on-surface-variant);
+  max-width: 800px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.telemetryBar {
+  background-color: var(--surface-container-high);
+  border: 1px solid var(--surface-variant);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.6875rem;
+}
+
+.telemetryItems {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.advisoryBox {
+  background-color: var(--tertiary-fixed);
+  color: var(--on-tertiary-fixed);
+  padding: 16px 20px;
+  border-left: 4px solid var(--tertiary-container);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.advisoryTitle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tertiary-container);
+}
+
+.advisoryText {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--tertiary);
+  margin: 4px 0 0 0;
+}
+
+/* Two Column Layout */
+.layout {
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 24px;
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 1fr;
+    padding: 20px 16px;
+    gap: 24px;
+  }
+}
+
+.sidebar {
+  position: sticky;
+  top: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .sidebar {
+    position: static;
+  }
+}
+
+.navCard {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-variant);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.navHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--surface-container);
+  padding-bottom: 8px;
+}
+
+.navTitle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+}
+
+.navList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.navItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  color: var(--on-surface-variant);
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-family: var(--font-ibm-plex-mono), monospace;
+  transition: all 0.15s ease;
+  border-left: 2px solid transparent;
+}
+
+.navItem:hover {
+  background-color: var(--surface-container);
+  color: var(--primary);
+  border-left-color: var(--primary);
+}
+
+.ruleBox {
+  background-color: var(--surface-container);
+  border: 1px solid var(--surface-variant);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ruleTitle {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.ruleText {
+  font-size: 0.6875rem;
+  color: var(--on-surface-variant);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Clauses Content */
+.clausesList {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.clauseCard {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--surface-variant);
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .clauseCard {
+    padding: 16px 20px;
+  }
+}
+
+.clauseHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--surface-container);
+  padding-bottom: 8px;
+}
+
+.clauseNum {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.clauseTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+}
+
+.clauseBody {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--on-surface);
+  margin: 0;
+}
+
+.subSection {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--surface-container);
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.subHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subBadge {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-family: var(--font-ibm-plex-mono), monospace;
+  font-size: 0.625rem;
+  padding: 2px 6px;
+  font-weight: 700;
+}
+
+.subTitle {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0;
+}
+
+.bulletList {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.8125rem;
+  color: var(--on-surface);
+  line-height: 1.6;
+}

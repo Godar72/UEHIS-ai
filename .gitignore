@@ -70,3 +70,70 @@ archive/old_experiments/UEHIS_training/*.zip
 
 # --- Jupyter checkpoints ---
 .ipynb_checkpoints/
+
+# --- Local scratch, audit scripts, and test artifacts ---
+scratch/
+brain/
+audit_*.py
+audit_*.json
+bootstrap_users.py
+*.bak
+*.bak.*
+*.backup_*
+*.before_*
+*.patch
+stitch_uehis_environmental_intelligence_atlas/
+
+# --- Dependencies & Playwright QA ---
+node_modules/
+tests/playwright_qa/
+
+# --- Jupyter notebooks ---
+*.ipynb
+
+# --- Temporary SQL files & scratch output ---
+*validation*.sql
+*validation*.txt
+geom.json
+payload.json
+temp.txt
+
+# --- Semantic validation images & local previews ---
+UEHIS_Production_2026/semantic_validation_samples/
+Logo.png
+
+# --- Large production datasets & exports (preserved on disk) ---
+UEHIS_Production_2026/*.geojson
+UEHIS_Production_2026/*.csv
+UEHIS_Production_2026/*.csv.bak
+
+# --- Duplicate model weights & experimental training directories ---
+UEHIS Code/
+UEHIS_training/unet_weights_slope_run*.pth
+UEHIS_training/patches_*/
+
+# --- Local audit reports ---
+UEHIS_FINAL_*.md
+audit_export.md
+
+# --- Local scratch, sync, and verification scripts ---
+apply_migration.py
+carbon_poc.py
+check_carbon_api.py
+check_db_and_api.py
+check_hash.py
+fix_excluded.py
+generate_corrected_validation_sql.py
+generate_validation_sql.py
+get_scenarios.py
+get_scenarios2.py
+import_scenarios.py
+load_production_db.py
+patch_production_sync.py
+rewrite_tests.py
+sync_phase3.py
+test_case_sensitivity.py
+test_endpoint.py
+update_sql.py
+verify_spacing.py
+

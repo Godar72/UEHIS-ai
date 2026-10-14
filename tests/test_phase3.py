@@ -376,6 +376,6 @@ def test_manifest_generation_and_shas(tmp_path):
     assert manifest["pm25_fixed_weight"] == 0.02
 
 def test_population_exposure_direction():
-    """Verify population_exposure is strictly configured as positive."""
+    """Verify population_exposure is strictly configured as negative."""
     from run_phase3 import FACTORS
-    assert FACTORS["population_exposure"][0] == "positive", "population_exposure must be configured as positive"
+    assert FACTORS["population_exposure"][0] == "negative", "population_exposure must be configured as negative"
