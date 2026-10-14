@@ -2,10 +2,19 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isSafeRedirect } from '@/lib/auth-utils'
 
+function getCanonicalBase(request: NextRequest): string {
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host');
+  const isHttps = forwardedProto === 'https' || process.env.NODE_ENV === 'production';
+  return `${isHttps ? 'https' : 'http'}://${forwardedHost || request.nextUrl.host}`;
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
+
+  const canonicalBase = getCanonicalBase(request);
 
   // Route paths
   const rawPath = request.nextUrl.pathname
@@ -72,9 +81,12 @@ export async function updateSession(request: NextRequest) {
           supabaseResponse = NextResponse.next({
             request,
           })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
+          cookiesToSet.forEach(({ name, value, options }) => {
+            const secureOptions = process.env.NODE_ENV === 'production'
+              ? { ...options, secure: true, sameSite: (options.sameSite || 'lax') as 'lax' | 'strict' | 'none' }
+              : options;
+            supabaseResponse.cookies.set(name, value, secureOptions)
+          })
         },
       },
     }
@@ -91,12 +103,12 @@ export async function updateSession(request: NextRequest) {
   if (isAuthPage && user) {
     const nextParam = request.nextUrl.searchParams.get('next');
     const destination = (nextParam && isSafeRedirect(nextParam)) ? nextParam : '/explore';
-    return NextResponse.redirect(new URL(destination, request.url));
+    return NextResponse.redirect(new URL(destination, canonicalBase));
   }
 
   // 3. Unauthenticated access to protected core application routes (/explore, /carbon, /scenarios)
   if (isProtectedAppRoute && !user) {
-    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(rawPath)}`, request.url))
+    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(rawPath)}`, canonicalBase))
   }
 
   // 4. Unauthenticated access to Admin, Researcher, or Planting Tile routes
@@ -107,7 +119,7 @@ export async function updateSession(request: NextRequest) {
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
-    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(rawPath)}`, request.url))
+    return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(rawPath)}`, canonicalBase))
   }
 
   // 5. Role verification for Admin, Researcher, and Planting Tile routes
@@ -122,7 +134,7 @@ export async function updateSession(request: NextRequest) {
           { status: 403, headers: { 'Content-Type': 'application/json' } }
         )
       }
-      return NextResponse.redirect(new URL('/explore', request.url))
+      return NextResponse.redirect(new URL('/explore', canonicalBase))
     }
     
     if ((isResearcherRoute || isPlantingTileRoute) && !['admin', 'researcher'].includes(role)) {
@@ -132,7 +144,7 @@ export async function updateSession(request: NextRequest) {
           { status: 403, headers: { 'Content-Type': 'application/json' } }
         )
       }
-      return NextResponse.redirect(new URL('/explore', request.url))
+      return NextResponse.redirect(new URL('/explore', canonicalBase))
     }
   }
 

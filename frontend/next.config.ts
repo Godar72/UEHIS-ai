@@ -52,10 +52,14 @@ const nextConfig: NextConfig = {
               "frame-src 'none'",
               // Object: none
               "object-src 'none'",
+              // Upgrade insecure requests in production
+              ...(process.env.NODE_ENV === 'production' ? ["upgrade-insecure-requests"] : []),
               // Base URI: self
               "base-uri 'self'",
               // Form action: self
               "form-action 'self'",
+              // Clickjacking protection: disallow framing
+              "frame-ancestors 'none'",
             ].join('; ')
           },
         ],

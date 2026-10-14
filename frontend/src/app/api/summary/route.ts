@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiters, getClientIP, rateLimitResponse } from '@/lib/rate-limit';
 
 // Production blocks (5,309) are immutable baseline data; cache summary for 1 hour
-let cachedSummary: any = null;
+let cachedSummary: unknown = null;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
     
     const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || process.env.UEHIS_API_URL || 'http://127.0.0.1:8000';
     const internalKey = process.env.UEHIS_API_KEY || '';
+
+    if (process.env.NODE_ENV === 'production' && !internalKey.trim()) {
+      console.error('[SECURITY_CONFIG_ERROR] UEHIS_API_KEY is not configured on the frontend server in production.');
+      return NextResponse.json({ error: 'Internal service configuration error' }, { status: 500 });
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
@@ -47,9 +52,9 @@ export async function GET(req: NextRequest) {
       cachedSummary = result;
       cacheTimestamp = Date.now();
       return NextResponse.json(result);
-    } catch (fetchErr: any) {
+    } catch (fetchErr: unknown) {
       clearTimeout(timeout);
-      if (fetchErr.name === 'AbortError') {
+      if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
         console.error('[SUMMARY_TIMEOUT]');
         return NextResponse.json({ error: 'Summary timeout' }, { status: 504 });
       }

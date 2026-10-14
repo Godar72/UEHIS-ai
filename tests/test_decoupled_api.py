@@ -122,16 +122,61 @@ def test_production_api_key_valid_and_invalid(monkeypatch):
     assert "Malformed geometry" in response.json()["detail"]
 
 def test_startup_validation_in_production(monkeypatch):
-    """Verify validate_startup_security raises RuntimeError if UEHIS_API_KEY is missing in production."""
+    """Verify validate_startup_security enforces API key, remote DB, and TLS in production."""
     from api.security import validate_startup_security
     import pytest
 
     monkeypatch.setenv("ENVIRONMENT", "production")
+
+    # 1. Missing UEHIS_API_KEY -> raises
     monkeypatch.delenv("UEHIS_API_KEY", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@db.example.co:5432/postgres?sslmode=require")
     with pytest.raises(RuntimeError, match="CRITICAL SECURITY CONFIGURATION ERROR"):
         validate_startup_security()
 
+    # 2. Configured key, but missing DATABASE_URL -> raises
     monkeypatch.setenv("UEHIS_API_KEY", "valid_key")
-    # Should not raise
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("DOCKER_DATABASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="CRITICAL DATABASE CONFIGURATION ERROR"):
+        validate_startup_security()
+
+    # 3. Localhost in DATABASE_URL in production -> raises
+    monkeypatch.setenv("DATABASE_URL", "postgresql://uehis:pass@localhost:5432/uehis?sslmode=require")
+    with pytest.raises(RuntimeError, match="CRITICAL DATABASE SECURITY ERROR.*local host"):
+        validate_startup_security()
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://uehis:pass@127.0.0.1:5432/uehis?sslmode=require")
+    with pytest.raises(RuntimeError, match="CRITICAL DATABASE SECURITY ERROR.*local host"):
+        validate_startup_security()
+
+    # 4. Remote host without sslmode=require in production -> raises
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@aws-0-ap-south-1.pooler.supabase.com:6543/postgres")
+    with pytest.raises(RuntimeError, match="CRITICAL DATABASE SECURITY ERROR.*sslmode=require"):
+        validate_startup_security()
+
+    # 5. Remote host with sslmode=prefer in production -> raises
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@db.project.supabase.co:5432/postgres?sslmode=prefer")
+    with pytest.raises(RuntimeError, match="CRITICAL DATABASE SECURITY ERROR.*sslmode=require"):
+        validate_startup_security()
+
+    # 6. Valid remote host with sslmode=require -> passes cleanly
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg2://user:pass@db.project.supabase.co:5432/postgres?sslmode=require")
     validate_startup_security()
 
+    # 7. Valid remote host with DOCKER_DATABASE_URL override -> passes cleanly
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("DOCKER_DATABASE_URL", "postgresql://user:pass@db.project.supabase.co:5432/postgres?sslmode=verify-full")
+    validate_startup_security()
+
+
+def test_startup_validation_in_development(monkeypatch):
+    """Verify validate_startup_security allows local development without remote DB or TLS."""
+    from api.security import validate_startup_security
+
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("UEHIS_API_KEY", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://uehis:uehis@localhost:5432/uehis")
+
+    # Should not raise in development
+    validate_startup_security()

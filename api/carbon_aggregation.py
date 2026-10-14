@@ -54,10 +54,42 @@ def validate_and_transform_geometry(geom_wgs84: dict) -> gpd.GeoDataFrame:
         
     return gdf_32643
 
+def initialize_gee(force: bool = False) -> None:
+    """
+    Initialise the Google Earth Engine API using either:
+    1. Direct JSON service-account credentials string from GEE_SERVICE_ACCOUNT_JSON
+    2. Mounted credential file via GOOGLE_APPLICATION_CREDENTIALS or GEE_SERVICE_ACCOUNT_FILE
+    3. Existing local developer OAuth credentials via standard ee.Initialize(project=...)
+    """
+    if not force and getattr(ee.data, '_credentials', None):
+        return
+
+    project = os.getenv('GEE_PROJECT_ID')
+    sa_json = os.getenv('GEE_SERVICE_ACCOUNT_JSON')
+    sa_file = os.getenv('GOOGLE_APPLICATION_CREDENTIALS') or os.getenv('GEE_SERVICE_ACCOUNT_FILE')
+
+    if sa_json and sa_json.strip():
+        try:
+            key_data = json.loads(sa_json)
+        except Exception as json_err:
+            logger.error("Failed to parse GEE_SERVICE_ACCOUNT_JSON: %s", json_err)
+            raise RuntimeError(f"Invalid GEE_SERVICE_ACCOUNT_JSON: {json_err}") from json_err
+
+        email = key_data.get('client_email')
+        credentials = ee.ServiceAccountCredentials(email, key_data=key_data)
+        ee.Initialize(credentials=credentials, project=project)
+        logger.info("[GEE] Initialised with Service Account credentials from JSON environment variable.")
+    elif sa_file and os.path.exists(sa_file):
+        credentials = ee.ServiceAccountCredentials(None, key_file=sa_file)
+        ee.Initialize(credentials=credentials, project=project)
+        logger.info("[GEE] Initialised with Service Account credentials from file: %s", sa_file)
+    else:
+        ee.Initialize(project=project)
+        logger.info("[GEE] Initialised with default/CLI credentials for project: %s", project)
+
 def fetch_canopy_height(geom_wgs84: dict) -> float:
     try:
-        if not getattr(ee.data, '_credentials', None):
-            ee.Initialize(project=os.getenv('GEE_PROJECT_ID'))
+        initialize_gee()
             
         fc = ee.FeatureCollection([ee.Feature(geom_wgs84)])
         canopy_img = ee.Image(GEE_CANOPY_ASSET)

@@ -190,3 +190,109 @@ def test_test13_determinism(blocks_gdf):
     res1 = aggregate_study_area_carbon(geom.__geo_interface__)
     res2 = aggregate_study_area_carbon(geom.__geo_interface__)
     assert res1 == res2
+
+
+def test_test14_initialize_gee_with_json_secret(monkeypatch):
+    """Verify initialize_gee correctly parses JSON secret and passes ServiceAccountCredentials."""
+    import ee
+    from api.carbon_aggregation import initialize_gee
+
+    mock_creds_called = []
+    mock_init_called = []
+
+    class MockServiceAccountCredentials:
+        def __init__(self, email, key_data=None, key_file=None):
+            mock_creds_called.append({"email": email, "key_data": key_data, "key_file": key_file})
+
+    def mock_ee_initialize(credentials=None, project=None):
+        mock_init_called.append({"credentials": credentials, "project": project})
+
+    # Clear existing credentials
+    monkeypatch.setattr(ee.data, "_credentials", None, raising=False)
+    monkeypatch.setattr(ee, "ServiceAccountCredentials", MockServiceAccountCredentials)
+    monkeypatch.setattr(ee, "Initialize", mock_ee_initialize)
+
+    fake_sa_json = '{"client_email": "uehis-service@project.iam.gserviceaccount.com", "private_key": "dummy"}'
+    monkeypatch.setenv("GEE_SERVICE_ACCOUNT_JSON", fake_sa_json)
+    monkeypatch.setenv("GEE_PROJECT_ID", "test-gee-project")
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+
+    initialize_gee(force=True)
+
+    assert len(mock_creds_called) == 1
+    assert mock_creds_called[0]["email"] == "uehis-service@project.iam.gserviceaccount.com"
+    assert mock_creds_called[0]["key_data"]["private_key"] == "dummy"
+    assert len(mock_init_called) == 1
+    assert mock_init_called[0]["project"] == "test-gee-project"
+
+
+def test_test15_initialize_gee_with_credential_file(monkeypatch, tmp_path):
+    """Verify initialize_gee loads credentials from file path when configured."""
+    import ee
+    from api.carbon_aggregation import initialize_gee
+
+    mock_creds_called = []
+    mock_init_called = []
+
+    class MockServiceAccountCredentials:
+        def __init__(self, email, key_data=None, key_file=None):
+            mock_creds_called.append({"email": email, "key_data": key_data, "key_file": key_file})
+
+    def mock_ee_initialize(credentials=None, project=None):
+        mock_init_called.append({"credentials": credentials, "project": project})
+
+    monkeypatch.setattr(ee.data, "_credentials", None, raising=False)
+    monkeypatch.setattr(ee, "ServiceAccountCredentials", MockServiceAccountCredentials)
+    monkeypatch.setattr(ee, "Initialize", mock_ee_initialize)
+
+    # Create dummy credentials file
+    cred_file = tmp_path / "dummy_sa.json"
+    cred_file.write_text('{"client_email": "file@iam.gserviceaccount.com"}')
+
+    monkeypatch.delenv("GEE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(cred_file))
+    monkeypatch.setenv("GEE_PROJECT_ID", "test-gee-project-file")
+
+    initialize_gee(force=True)
+
+    assert len(mock_creds_called) == 1
+    assert mock_creds_called[0]["key_file"] == str(cred_file)
+    assert len(mock_init_called) == 1
+    assert mock_init_called[0]["project"] == "test-gee-project-file"
+
+
+def test_test16_initialize_gee_cli_fallback(monkeypatch):
+    """Verify initialize_gee falls back to standard ee.Initialize(project=...) when no SA is configured."""
+    import ee
+    from api.carbon_aggregation import initialize_gee
+
+    mock_init_called = []
+
+    def mock_ee_initialize(credentials=None, project=None):
+        mock_init_called.append({"credentials": credentials, "project": project})
+
+    monkeypatch.setattr(ee.data, "_credentials", None, raising=False)
+    monkeypatch.setattr(ee, "Initialize", mock_ee_initialize)
+
+    monkeypatch.delenv("GEE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_APPLICATION_CREDENTIALS", raising=False)
+    monkeypatch.delenv("GEE_SERVICE_ACCOUNT_FILE", raising=False)
+    monkeypatch.setenv("GEE_PROJECT_ID", "test-fallback-project")
+
+    initialize_gee(force=True)
+
+    assert len(mock_init_called) == 1
+    assert mock_init_called[0]["credentials"] is None
+    assert mock_init_called[0]["project"] == "test-fallback-project"
+
+
+def test_test17_initialize_gee_invalid_json_raises(monkeypatch):
+    """Verify initialize_gee raises a clear RuntimeError if GEE_SERVICE_ACCOUNT_JSON is malformed."""
+    import ee
+    from api.carbon_aggregation import initialize_gee
+
+    monkeypatch.setattr(ee.data, "_credentials", None, raising=False)
+    monkeypatch.setenv("GEE_SERVICE_ACCOUNT_JSON", "{invalid-json-string")
+
+    with pytest.raises(RuntimeError, match="Invalid GEE_SERVICE_ACCOUNT_JSON"):
+        initialize_gee(force=True)

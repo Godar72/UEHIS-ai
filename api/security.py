@@ -24,9 +24,9 @@ def is_production() -> bool:
 
 def validate_startup_security() -> None:
     """
-    Validate that required security configuration is present on service startup.
+    Validate that required security and infrastructure configuration is present on startup.
     Fails startup with a clear configuration error if running in production
-    without a configured UEHIS_API_KEY.
+    without a configured UEHIS_API_KEY, a remote DATABASE_URL, or database TLS.
     """
     if is_production():
         key = os.getenv("UEHIS_API_KEY")
@@ -34,6 +34,31 @@ def validate_startup_security() -> None:
             raise RuntimeError(
                 "CRITICAL SECURITY CONFIGURATION ERROR: UEHIS_API_KEY must be set to a "
                 "non-empty secret token when ENVIRONMENT=production."
+            )
+
+        # In production, validate DATABASE_URL (or DOCKER_DATABASE_URL)
+        db_url = (os.getenv("DOCKER_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+        if not db_url:
+            raise RuntimeError(
+                "CRITICAL DATABASE CONFIGURATION ERROR: DATABASE_URL must be configured "
+                "when ENVIRONMENT=production."
+            )
+
+        # Check for disallowed local hosts in production
+        lowered_url = db_url.lower()
+        disallowed_hosts = ("localhost", "127.0.0.1", "0.0.0.0", "host.docker.internal")
+        if any(h in lowered_url for h in disallowed_hosts):
+            raise RuntimeError(
+                "CRITICAL DATABASE SECURITY ERROR: DATABASE_URL cannot point to a local host "
+                "in production. A remote managed database is required."
+            )
+
+        # Check for mandatory TLS enforcement
+        valid_sslmodes = ("sslmode=require", "sslmode=verify-ca", "sslmode=verify-full")
+        if not any(mode in lowered_url for mode in valid_sslmodes):
+            raise RuntimeError(
+                "CRITICAL DATABASE SECURITY ERROR: DATABASE_URL must enforce TLS with "
+                "'?sslmode=require' (or 'verify-full') when ENVIRONMENT=production."
             )
 
 

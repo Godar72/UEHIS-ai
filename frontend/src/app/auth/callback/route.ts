@@ -3,8 +3,16 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isSafeRedirect } from '@/lib/auth-utils';
 
+function getCanonicalBase(request: NextRequest): string {
+  const forwardedProto = request.headers.get('x-forwarded-proto');
+  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host');
+  const isHttps = forwardedProto === 'https' || process.env.NODE_ENV === 'production';
+  return `${isHttps ? 'https' : 'http'}://${forwardedHost || request.nextUrl.host}`;
+}
+
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
+  const canonicalBase = getCanonicalBase(request);
   const code = requestUrl.searchParams.get('code');
   const error = requestUrl.searchParams.get('error');
   const errorDescription = requestUrl.searchParams.get('error_description');
@@ -19,7 +27,7 @@ export async function GET(request: NextRequest) {
   if (error) {
     const message = errorDescription || error;
     console.warn('OAuth callback provider notice:', message);
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}${nextQuery}`, request.url));
+    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(message)}${nextQuery}`, canonicalBase));
   }
 
   // Exchange code for Supabase authenticated session
@@ -31,7 +39,7 @@ export async function GET(request: NextRequest) {
       if (exchangeError) {
         console.error('OAuth code exchange failed:', exchangeError.message);
         return NextResponse.redirect(
-          new URL(`/login?error=${encodeURIComponent('Failed to complete authentication. Code may have expired.')}${nextQuery}`, request.url)
+          new URL(`/login?error=${encodeURIComponent('Failed to complete authentication. Code may have expired.')}${nextQuery}`, canonicalBase)
         );
       }
 
@@ -49,15 +57,15 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      return NextResponse.redirect(new URL(destination, request.url));
+      return NextResponse.redirect(new URL(destination, canonicalBase));
     } catch (err: unknown) {
       console.error('Unexpected error in auth callback:', err);
       return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent('Authentication processing error. Please try again.')}${nextQuery}`, request.url)
+        new URL(`/login?error=${encodeURIComponent('Authentication processing error. Please try again.')}${nextQuery}`, canonicalBase)
       );
     }
   }
 
   // Fallback if no code and no error provided
-  return NextResponse.redirect(new URL(`/login${nextQuery}`, request.url));
+  return NextResponse.redirect(new URL(`/login${nextQuery}`, canonicalBase));
 }

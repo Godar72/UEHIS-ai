@@ -53,9 +53,10 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
+      ENVIRONMENT: ${ENVIRONMENT:-development}
       PORT: 3000
       PYTHON_SERVICE_URL: http://api:8000
-      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://host.docker.internal:54221}
+      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-${NEXT_PUBLIC_SUPABASE_URL}}
       NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost}
       NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}

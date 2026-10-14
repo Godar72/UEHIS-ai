@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -148,6 +149,56 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       { error: 'Internal Server Error' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store, max-age=0' } }
+    );
+  }
+}
+
+/**
+ * DELETE /api/profile
+ * Authenticated user account self-deletion (GDPR Right-to-Erasure).
+ * Deletes user account from auth.users via admin client, triggering CASCADE
+ * deletion on user_profiles, user_roles, user_activity, study_areas, and api_keys.
+ */
+export async function DELETE() {
+  try {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401, headers: { 'Cache-Control': 'private, no-store, max-age=0' } }
+      );
+    }
+
+    // Delete user via admin client (requires service role key to manage auth.users)
+    const adminClient = createAdminClient();
+
+    // Explicitly purge user-owned study areas (which do not have a hard FK cascade)
+    await adminClient.from('study_areas').delete().eq('user_id', user.id);
+
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
+
+    if (deleteError) {
+      console.error('Account deletion error:', deleteError);
+      return NextResponse.json(
+        { error: 'Failed to complete account deletion' },
+        { status: 500 }
+      );
+    }
+
+    // Sign out caller and invalidate session cookies
+    await supabase.auth.signOut();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Account and associated personal records successfully deleted.',
+    });
+  } catch (error) {
+    console.error('DELETE /api/profile error:', error);
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500 }
     );
   }
 }

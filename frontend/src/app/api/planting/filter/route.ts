@@ -14,7 +14,7 @@ export async function POST(request: Request) {
         const { data: roleData } = await supabase.rpc('get_my_role');
         role = roleData;
       }
-    } catch (authErr) {
+    } catch {
       // If cookie/session store is invalid or missing, treat as unauthenticated
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -36,6 +36,11 @@ export async function POST(request: Request) {
 
     const pythonServiceUrl = process.env.PYTHON_SERVICE_URL || process.env.UEHIS_API_URL || 'http://127.0.0.1:8000';
     const internalKey = process.env.UEHIS_API_KEY || '';
+
+    if (process.env.NODE_ENV === 'production' && !internalKey.trim()) {
+      console.error('[SECURITY_CONFIG_ERROR] UEHIS_API_KEY is not configured on the frontend server in production.');
+      return NextResponse.json({ error: 'Internal service configuration error' }, { status: 500 });
+    }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
@@ -59,7 +64,7 @@ export async function POST(request: Request) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[PLANTING_FILTER_UPSTREAM_ERROR] Status: ${response.status}`, errorText);
-        let errorData: any;
+        let errorData: Record<string, unknown>;
         try {
           errorData = JSON.parse(errorText);
         } catch {
@@ -70,9 +75,9 @@ export async function POST(request: Request) {
 
       const result = await response.json();
       return NextResponse.json(result);
-    } catch (fetchErr: any) {
+    } catch (fetchErr: unknown) {
       clearTimeout(timeout);
-      if (fetchErr.name === 'AbortError') {
+      if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
         console.error('[PLANTING_FILTER_TIMEOUT]');
         return NextResponse.json({ error: 'Analysis timed out' }, { status: 504 });
       }
