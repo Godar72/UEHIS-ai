@@ -1,0 +1,25 @@
+{
+  "pipeline_version": "Phase 4 Stage 1",
+  "git_commit": "1d760347c551c16eaaebcc964799fab010303002",
+  "processing_timestamp": "2026-09-27T10:13:56.359266",
+  "canopy_class_id": 0,
+  "block_grid_specification": "EPSG:32643",
+  "grid_origin": "E=300000, N=2000000",
+  "grid_size": "16x16 blocks (example)",
+  "block_size": "250m x 250m",
+  "unet_model_checksums": [
+    "f6a1c4f266ec53e3b7203c105aa7da8245e96046cee500e8d3f536c2d5df7c22",
+    "47709658f8ebc1d4582ec8604db5e65f38526ef9075ca254a6e92f9987fd3a40",
+    "74275566a429ea81eec62194a8db84241e806ea8e11f2120dd077a56f13cfa15"
+  ],
+  "height_source": "ETH_GlobalCanopyHeight_2020",
+  "height_source_mode": "production",
+  "fallback_status": false,
+  "segmentation_raster_path": "C:\\Users\\adity\\Desktop\\SL\\UEHIS_Production_2026\\pune_unet_segmentation_FROZEN_2026.tif",
+  "crs": "EPSG:4326",
+  "spatial_resolution": [
+    8.983152841195215e-05,
+    8.983152841195215e-05
+  ],
+  "segmentation_raster_sha256": "5422d7ca31baa4cb70b2f4cfb45e0f3f9756ad018131d32c3c3b0cfc44f4b42b"
+}

@@ -1,0 +1,11 @@
+{
+  "total_blocks": 5309,
+  "scorable_blocks": 5298,
+  "excluded_blocks": 11,
+  "excluded_reason": "zero valid 10m source pixels for segmentation, NDVI, imperviousness and temperature within extremely small Pune-boundary intersections",
+  "excluded_blocks_boundary_coverage_max_fraction": 0.00810197208,
+  "excluded_blocks_boundary_coverage_max_percent": 0.8101972080000001,
+  "imputation_used": false,
+  "negative_ndvi_clipped": false,
+  "negative_ndvi_retained": true
+}

@@ -53,6 +53,7 @@ Thumbs.db
 
 # --- PDF / binary documents (not source code) ---
 *.pdf
+*.docx
 
 # --- Large images (generated maps/previews) ---
 pune_study_area_map.png
@@ -75,6 +76,9 @@ archive/old_experiments/UEHIS_training/*.zip
 
 # --- Local scratch, audit scripts, and test artifacts ---
 scratch/
+scratch_*
+Logbook/
+New folder/
 brain/
 audit_*.py
 audit_*.json
@@ -138,4 +142,11 @@ test_case_sensitivity.py
 test_endpoint.py
 update_sql.py
 verify_spacing.py
+test_builder.py
+test_winsdk_ocr.py
+check_pdf_pages.py
+find_exact_pages.py
+find_exact_tables.py
+find_pages.py
+ocr_logbook.ps1
 

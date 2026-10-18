@@ -1,0 +1,16 @@
+{
+    "file_name": "pune_planting_optimization_2026.geojson",
+    "file_hash": "uncomputed_due_to_geojson_skip",
+    "csv_hash": "3b217d79496b4efaf20ab68c96d85d432889eae9e78673171fc947b6ed20a5dd",
+    "total_candidates": 27422,
+    "total_units_generated": 2137451,
+    "total_selected": 2137451,
+    "configuration": {
+        "spacing_m": 10.0,
+        "scenario_carbon_per_tree_tonnes": 0.5,
+        "scenario_name": "Standard 10m Illustrative Scenario"
+    },
+    "objective": "Primary: UEHI score. Secondary: 10% penalty if distance_to_water_m > 1000m.",
+    "provenance": "Phase 4 Stage 2.4 Final Pune-Wide Optimization",
+    "source_phase3_hash": "9a9c8c315ccc04c85e179cf44627d7f7c122db308b796398de774f1336fb12f0"
+}

@@ -1,0 +1,20 @@
+{
+  "asset": "pune_boundary_mask_10m_2026.tif",
+  "purpose": "Authoritative Pune boundary mask on exact frozen U-Net production grid",
+  "boundary_source": "/content/uehis-project/pune_city_boundary.geojson",
+  "boundary_crs": "EPSG:4326",
+  "target_grid": "/content/drive/MyDrive/UEHIS_Production_2026/pune_unet_segmentation_FROZEN_2026.tif",
+  "target_crs": "EPSG:4326",
+  "width": 3011,
+  "height": 2131,
+  "resolution_x": 8.983152841195215e-05,
+  "resolution_y": 8.983152841195215e-05,
+  "pixel_area_m2": 8.069703496827366e-09,
+  "inside_pixel_count": 3310941,
+  "outside_pixel_count": 3105500,
+  "rasterized_inside_area_m2": 0.026718312165489096,
+  "vector_boundary_area_m2": 0.026718406515214902,
+  "raster_vector_area_difference_fraction": 3.531263204364694e-06,
+  "rasterization_rule": "all_touched=False",
+  "sha256": "3b0785b520f5ddd66d05add25e682df475236f760f1f262ca2354630813e361c"
+}

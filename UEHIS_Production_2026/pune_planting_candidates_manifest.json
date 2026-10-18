@@ -1,0 +1,11 @@
+{
+  "source_dataset": "OpenStreetMap",
+  "release_version": "Live Query",
+  "download_method": "osmnx v2.1.1 Overpass API",
+  "crs": "EPSG:32643",
+  "license": "ODbL",
+  "retrieval_timestamp": "2026-09-27T11:09:47.878066",
+  "source_url": "https://overpass-api.de/api/interpreter",
+  "candidate_count": 27422,
+  "file_hash": "63e37d3b8018d14532a5642e8f0751addf68a711a8f1f9ee709b40e978491a09"
+}

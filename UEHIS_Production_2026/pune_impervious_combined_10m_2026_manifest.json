@@ -1,0 +1,59 @@
+{
+  "pipeline": "UEHIS",
+  "asset": "Pune combined impervious factor",
+  "version": "1.0",
+  "method": {
+    "primary": "U-Net impervious class",
+    "osm_support": "OSM building OR road",
+    "combination": "U-Net impervious OR OSM impervious",
+    "nodata_policy": "U-Net valid: OR with OSM; U-Net nodata + OSM valid: OSM; both nodata: nodata"
+  },
+  "inputs": {
+    "unet": "/content/drive/MyDrive/UEHIS_Production_2026/pune_unet_segmentation_FROZEN_2026.tif",
+    "osm": "/content/drive/MyDrive/UEHIS_Production_2026/pune_osm_impervious_10m_2026.tif",
+    "unet_sha256": "5422d7ca31baa4cb70b2f4cfb45e0f3f9756ad018131d32c3c3b0cfc44f4b42b",
+    "osm_sha256": "7de88efb4d180bffff914c3336a1559da7ae3959deec6cba113d44dfe3b0e9bb"
+  },
+  "grid": {
+    "width": 3011,
+    "height": 2131,
+    "crs": "EPSG:4326",
+    "transform": [
+      8.983152841195215e-05,
+      0.0,
+      73.74979836411606,
+      0.0,
+      -8.983152841195215e-05,
+      18.620908029928326,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "bounds": [
+      73.74979836411606,
+      18.429477042882457,
+      74.02028109616445,
+      18.620908029928326
+    ]
+  },
+  "qa": {
+    "unet_valid_pixels": 3318112,
+    "unet_impervious_pixels": 1376467,
+    "osm_valid_pixels": 3310941,
+    "osm_impervious_pixels": 893496,
+    "both_valid_pixels": 3310941,
+    "unet_only_valid_pixels": 7171,
+    "osm_only_valid_pixels": 0,
+    "both_nodata_pixels": 3098329,
+    "unet_osm_overlap_pixels": 510343,
+    "combined_valid_pixels": 3318112,
+    "combined_impervious_pixels": 1759620,
+    "combined_nonimpervious_pixels": 1558492,
+    "combined_nodata_pixels": 3098329
+  },
+  "provenance": {
+    "grid_source": "frozen U-Net production segmentation",
+    "osm_source": "OpenStreetMap contributors",
+    "osm_license": "ODbL"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "grid_name": "UEHIS Pune PN 250m Production Grid",
+  "version": "1.0",
+  "crs": "EPSG:32643",
+  "cell_size_m": 250,
+  "cell_area_m2": 62500,
+  "origin_easting_m": 300000.0,
+  "origin_northing_m": 2000000.0,
+  "boundary_source": "pune_city_boundary.geojson",
+  "boundary_crs": "EPSG:4326",
+  "block_count": 5309,
+  "geometry_hash_sha256": "c51bed539eda50c09c436a769ca943146f68017b2003eaefe71f7cdeaa8d30a1",
+  "id_scheme": "PN_<lower_left_UTM_easting_m>_<lower_left_UTM_northing_m>",
+  "full_cell_geometry": true,
+  "partial_boundary_cells_retained": true,
+  "generation_method": "Fixed-origin 250m UTM grid intersected with Pune boundary"
+}

@@ -1,0 +1,175 @@
+{
+  "run_id": "7a97ccdd-9122-4c9c-a51c-88286f937b1c",
+  "timestamp": "2026-09-26T18:25:46.792083",
+  "git_commit": "unknown",
+  "aggregation_version": "1.1",
+  "model_checksum": "unknown",
+  "python_version": "3.13.15",
+  "rasterio_version": "1.5.1",
+  "geopandas_version": "1.1.4",
+  "numpy_version": "2.1.3",
+  "pandas_version": "2.2.3",
+  "shapely_version": "2.1.2",
+  "geometry_specification": "EPSG:32643",
+  "geometry_hash_specification": "SHA-256 of WKT rounded to 3 decimal places",
+  "processing_configuration": {
+    "osm_rasterization_threshold": "50_percent_center",
+    "population_intersection": "exact_area_weighted",
+    "impervious_nodata_policy": "unet_valid_or_osm_valid",
+    "boundary_mask": "authoritative Pune boundary on exact U-Net grid",
+    "boundary_rasterization": "all_touched=False",
+    "block_completeness_denominator": "Pune-covered pixels per block"
+  },
+  "inputs": {
+    "segmentation": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_unet_segmentation_FROZEN_2026.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 8.983152841195215e-05,
+        "y": 8.983152841195215e-05
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "5422d7ca31baa4cb70b2f4cfb45e0f3f9756ad018131d32c3c3b0cfc44f4b42b"
+    },
+    "building": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_osm_impervious_10m_2026.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 8.983152841195215e-05,
+        "y": 8.983152841195215e-05
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "7de88efb4d180bffff914c3336a1559da7ae3959deec6cba113d44dfe3b0e9bb"
+    },
+    "road": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_osm_impervious_10m_2026.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 8.983152841195215e-05,
+        "y": 8.983152841195215e-05
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "7de88efb4d180bffff914c3336a1559da7ae3959deec6cba113d44dfe3b0e9bb"
+    },
+    "union": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_impervious_combined_10m_2026.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 8.983152841195215e-05,
+        "y": 8.983152841195215e-05
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "07d4668c488afd8da0994518191a9e6201b843c88b71d66a7dccf83ad08d36ee"
+    },
+    "ndvi": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_ndvi_2026.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 8.983152841195215e-05,
+        "y": 8.983152841195215e-05
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "3ea50578daaa99b45775fe37fab6f0bdc80a462e5119b6f3072fbecb6544819d"
+    },
+    "temperature": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_lst_jan_mar_2024_uehis_grid.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 8.983152841195215e-05,
+        "y": 8.983152841195215e-05
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "d86818c04608e0434d4798d6d18c8285999799e96a0c338f279a142c5b611690"
+    },
+    "population": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_worldpop_R2025A_2024_100m_PN_COVERAGE.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 0.00083333333,
+        "y": 0.00083333333
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "27bcabe1a7dd1dbec5b46098dde3ef67999629b71cd067b892311d41b2a71e86"
+    },
+    "boundary_mask": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_boundary_mask_10m_2026.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 8.983152841195215e-05,
+        "y": 8.983152841195215e-05
+      },
+      "crs": "EPSG:4326",
+      "content_sha256": "3b0785b520f5ddd66d05add25e682df475236f760f1f262ca2354630813e361c"
+    },
+    "pm25": {
+      "path": "/content/drive/MyDrive/UEHIS_Production_2026/pune_pm25_acag_v6gl03_jan_mar_2024_250m_UNMASKED.tif",
+      "dataset_identity": "unknown",
+      "acquisition_date": "unknown",
+      "spatial_resolution": {
+        "x": 250.0,
+        "y": 250.0
+      },
+      "crs": "EPSG:32643",
+      "content_sha256": "5804b631ca8c72e88fca3a900b455f0c446d9795383d8bedb561dc707ce685d3",
+      "source": "ACAG/WUSTL V6.GL.03",
+      "temporal_period": "Jan-Mar 2024",
+      "source_resolution": "0.01 degree (~1.1 km)",
+      "computational_grid": "UEHIS PN 250m",
+      "resampling": "bilinear",
+      "effective_information_resolution": "coarser than 250m",
+      "boundary_mask": "NOT applied to PM2.5 raster",
+      "aggregation": "direct 1:1 PN-cell lookup",
+      "intensive_variable": true,
+      "area_dilution": false
+    }
+  },
+  "output": {
+    "factor_csv": "/content/drive/MyDrive/UEHIS_Production_2026/pune_factors_5309_production_2026.csv",
+    "rows": 5309,
+    "columns": [
+      "block_id",
+      "geometry_hash",
+      "tree_density",
+      "canopy_pixel_count",
+      "segmentation_valid_pixel_count",
+      "pune_boundary_pixel_count",
+      "segmentation_completeness_fraction",
+      "impervious_surfaces",
+      "unet_impervious_pixel_count",
+      "osm_building_pixel_count",
+      "osm_road_pixel_count",
+      "impervious_union_pixel_count",
+      "impervious_valid_pixel_count",
+      "pune_boundary_pixel_count",
+      "impervious_completeness_fraction",
+      "ndvi",
+      "ndvi_valid_pixel_count",
+      "ndvi_completeness_fraction",
+      "temperature",
+      "temperature_valid_pixel_count",
+      "temperature_completeness_fraction",
+      "population_exposure",
+      "population_source_cell_count",
+      "population_source_valid_area_m2",
+      "population_completeness_fraction",
+      "pm25",
+      "pm25_valid_pixel_count",
+      "pm25_completeness_fraction"
+    ]
+  },
+  "execution_scope": {
+    "full_factor_aggregation": true,
+    "entropy_scoring": false,
+    "uehi_scoring": false,
+    "unet_inference": false,
+    "source_raster_regeneration": false
+  }
+}

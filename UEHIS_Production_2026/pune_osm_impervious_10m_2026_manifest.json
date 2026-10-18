@@ -1,0 +1,67 @@
+{
+  "pipeline": "UEHIS",
+  "asset": "Pune OSM common impervious raster",
+  "version": "1.0",
+  "created_from": {
+    "buildings": "/content/drive/MyDrive/UEHIS_Production_2026/pune_osm_buildings_2026.geojson",
+    "roads": "/content/drive/MyDrive/UEHIS_Production_2026/pune_osm_roads_2026.geojson",
+    "unet_grid": "/content/drive/MyDrive/UEHIS_Production_2026/pune_unet_segmentation_FROZEN_2026.tif",
+    "authoritative_boundary": "/content/uehis-project/pune_city_boundary.geojson"
+  },
+  "sources": {
+    "buildings_sha256": "5e1a606e377e500d5671eaeb04b0626bfef6264e9b93127e58c0c1712b8771ff",
+    "roads_sha256": "4f87953d76b75d501c0cd768eda9ab508af627a406998a30c1b8550d57f7f8bc",
+    "unet_sha256": "5422d7ca31baa4cb70b2f4cfb45e0f3f9756ad018131d32c3c3b0cfc44f4b42b",
+    "boundary_sha256": "9489386a488c5b55122372f2f63d2c66b899d93036b9c4139fce3492f5c29a82"
+  },
+  "grid": {
+    "width": 3011,
+    "height": 2131,
+    "crs": "EPSG:4326",
+    "transform": [
+      8.983152841195215e-05,
+      0.0,
+      73.74979836411606,
+      0.0,
+      -8.983152841195215e-05,
+      18.620908029928326,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "bounds": [
+      73.74979836411606,
+      18.429477042882457,
+      74.02028109616445,
+      18.620908029928326
+    ],
+    "resolution": [
+      8.983152841195215e-05,
+      8.983152841195215e-05
+    ]
+  },
+  "boundary_masking": {
+    "method": "authoritative Pune boundary rasterized on exact U-Net grid",
+    "all_touched": false,
+    "boundary_pixels": 3310941
+  },
+  "rasterization": {
+    "building_method": "actual mapped OSM building footprints",
+    "road_method": "actual mapped OSM road geometries",
+    "road_buffer_m": 0,
+    "combination": "building OR road",
+    "pixel_alignment": "exact frozen U-Net grid"
+  },
+  "qa": {
+    "building_features": 148586,
+    "road_features": 46763,
+    "building_pixels": 377746,
+    "road_pixels": 544130,
+    "building_road_overlap_pixels": 28380,
+    "combined_impervious_pixels": 893496,
+    "outside_boundary_nodata_pixels": 3105500
+  },
+  "osm": {
+    "license": "OpenStreetMap contributors \u2014 ODbL"
+  }
+}

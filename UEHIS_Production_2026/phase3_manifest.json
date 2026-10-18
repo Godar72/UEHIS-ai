@@ -1,0 +1,44 @@
+{
+  "execution_timestamp": "2026-10-04T09:38:43.940060Z",
+  "git_commit": "unknown",
+  "config_path": "C:\\Users\\adity\\Desktop\\SL\\configs\\production_2026.json",
+  "factors_csv": "pune_factors_5309_production_2026.csv",
+  "factor_sha256": "a26b6b91d5feb341d75999d97fce19cec7d8f66fe72a1ab0ea320451f50b38c3",
+  "eligibility_csv": "pune_uehi_scoring_eligibility_2026.csv",
+  "eligibility_sha256": "7a48ea07fbf6e228c337a1a09d61dc4fcf1ed8bf9c267e9b38e067f15aca4be5",
+  "total_blocks": 5309,
+  "scorable_blocks": 5298,
+  "excluded_blocks": 11,
+  "factor_list": [
+    "ndvi",
+    "tree_density",
+    "pm25",
+    "temperature",
+    "impervious_surfaces",
+    "population_exposure"
+  ],
+  "entropy_method": "shannon",
+  "pm25_cv": "fixed_rule",
+  "pm25_fixed_weight": 0.02,
+  "final_entropy_weights": {
+    "ndvi": 0.010621431260029162,
+    "tree_density": 0.7480277443556266,
+    "temperature": 0.0010049939375814214,
+    "impervious_surfaces": 0.12122884802354679,
+    "population_exposure": 0.09911698242321608,
+    "pm25": 0.02
+  },
+  "normalization_directions": {
+    "ndvi": "positive",
+    "tree_density": "positive",
+    "pm25": "negative",
+    "temperature": "negative",
+    "impervious_surfaces": "negative",
+    "population_exposure": "negative"
+  },
+  "synergy_alpha": 0.1,
+  "population_beta": 0.3,
+  "risk_thresholds": "<25 Critical, <50 High, <75 Moderate, >=75 Low",
+  "output_path": "UEHIS_Production_2026\\pune_uehi_scores_phase3_production_2026.csv",
+  "output_sha256": "9a9c8c315ccc04c85e179cf44627d7f7c122db308b796398de774f1336fb12f0"
+}
