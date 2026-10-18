@@ -42,7 +42,7 @@ Serves results through a **FastAPI** REST API and an interactive map dashboard.
 
 ```bash
 # 1. Clone and enter the project
-git clone https://github.com/Godar72/uehis-project.git && cd UEHIS
+git clone https://github.com/Godar72/UEHIS-ai.git && cd UEHIS
 
 # 2. Create a virtual environment
 python -m venv .venv && .venv\Scripts\activate   # Windows
