@@ -102,7 +102,8 @@ def main():
         "canopy_pixel_count", "valid_pixel_count", "canopy_completeness",
         "canopy_area_m2", "canopy_area_source",
         "canopy_height_m", "canopy_height_source", "n_trees_est",
-        "agb_kg", "carbon_stock_tonnes_co2e", "carbon_tons_sequestered",
+        "agb_kg", "carbon_stock_tonnes_co2e", "standing_carbon_stock_tonnes_co2e",
+        "carbon_tons_sequestered",
         "carbon_model_source", "allometric_model",
     ]
 

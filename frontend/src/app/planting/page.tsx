@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+import circle from '@turf/circle';
 import { MapView } from '@/components/Map';
 import { PlantingDetail, PlantingUnitProps } from '@/components/PlantingDetail/PlantingDetail';
+import { Search } from '@/components/Sidebar/Search';
 import styles from './planting.module.css';
 import { uehisClient } from '@/lib/api/client';
 import { recordActivity } from '@/lib/api/activity';
@@ -24,24 +26,26 @@ interface FilteredSummary {
 }
 
 interface FilteredData {
-  geojson: unknown;
+  geojson: GeoJSON.FeatureCollection | null;
   summary: FilteredSummary;
 }
 
 const INITIAL_CENTER: [number, number] = [73.8586, 18.5500];
 
-export default function PlantingPage() {
+function PlantingPageContent() {
   const [authStatus, setAuthStatus] = useState<'loading' | 'authorized' | 'denied'>('loading');
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [scenarios, setScenarios] = useState<ScenarioItem[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   
   const [selectedUnit, setSelectedUnit] = useState<PlantingUnitProps | null>(null);
 
-  const [studyAreaGeometry, setStudyAreaGeometry] = useState<unknown>(null);
+  const [studyAreaGeometry, setStudyAreaGeometry] = useState<GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection | null>(null);
   const [filteredData, setFilteredData] = useState<FilteredData | null>(null);
   const [isFiltering, setIsFiltering] = useState(false);
+  const [searchResult, setSearchResult] = useState<{ lat: number; lng: number; name: string; type: string; inCoverage?: boolean } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -103,8 +107,40 @@ export default function PlantingPage() {
     return scenarios.find(s => s.scenario_id === selectedScenarioId) || null;
   }, [scenarios, selectedScenarioId]);
 
+  // Synchronize from URL search parameters (e.g. redirected from /explore candidate block click)
+  useEffect(() => {
+    const latParam = searchParams.get('lat');
+    const lngParam = searchParams.get('lng');
+    const nameParam = searchParams.get('name');
+    const radiusParam = searchParams.get('radius');
+
+    if (latParam && lngParam && authStatus === 'authorized') {
+      const lat = parseFloat(latParam);
+      const lng = parseFloat(lngParam);
+      const name = nameParam || 'Searched Extent';
+      const radius = radiusParam ? parseInt(radiusParam, 10) : 2000;
+
+      const loc = { lat, lng, name, type: 'Locality', inCoverage: true };
+      const circleGeom = circle([lng, lat], radius / 1000, { units: 'kilometers' }).geometry;
+
+      queueMicrotask(() => {
+        setSearchResult(loc);
+        setStudyAreaGeometry(circleGeom);
+        if (selectedScenarioId) {
+          setIsFiltering(true);
+          uehisClient.planting.filterUnits(selectedScenarioId, circleGeom)
+            .then(data => setFilteredData(data as FilteredData))
+            .catch(err => {
+              console.error('Failed to filter units from URL params:', err);
+              setFilteredData(null);
+            })
+            .finally(() => setIsFiltering(false));
+        }
+      });
+    }
+  }, [searchParams, selectedScenarioId, authStatus]);
+
   const handlePlantingUnitClick = useCallback(async (unit: PlantingUnitProps) => {
-    // Immediately set selected unit with loading state to avoid stale values from previous selection
     setSelectedUnit({
       ...unit,
       loading: true,
@@ -117,7 +153,7 @@ export default function PlantingPage() {
         const detail = await uehisClient.planting.getUnitDetail(lookupId);
         if (detail && detail.properties) {
           const p = detail.properties;
-            let oppClass = p.opportunity_class || p.candidate_class || null;
+          let oppClass = p.opportunity_class || p.candidate_class || null;
           if (oppClass && typeof oppClass === 'string') {
             if (oppClass.includes('public_like')) oppClass = 'Public-like open space';
             else if (oppClass.includes('context_dependent')) oppClass = 'Context-dependent';
@@ -142,7 +178,6 @@ export default function PlantingPage() {
 
           setSelectedUnit(prev => {
             if (!prev) return null;
-            // Prevent race condition if user clicked another unit before this request finished
             const currentId = prev.unitUuid || prev.id;
             const resId = detail.unit_id || p.planting_unit_id;
             if (currentId && resId && currentId !== resId && currentId !== p.planting_unit_id) {
@@ -190,7 +225,7 @@ export default function PlantingPage() {
     setSelectedUnit(null);
   }, []);
 
-  const handleAnalyzeStudyArea = useCallback(async (geometry: unknown) => {
+  const handleAnalyzeStudyArea = useCallback(async (geometry: GeoJSON.Geometry | GeoJSON.Feature) => {
     if (!selectedScenarioId) return;
     setStudyAreaGeometry(geometry);
     setIsFiltering(true);
@@ -205,9 +240,46 @@ export default function PlantingPage() {
     }
   }, [selectedScenarioId]);
 
+  const handleLocationSelect = useCallback(async (location: { lat: number; lng: number; name: string; type: string; inCoverage?: boolean }) => {
+    setSelectedUnit(null);
+    setSearchResult(location);
+
+    if (selectedScenarioId) {
+      const radiusMeters = 2000;
+      const circleGeom = circle([location.lng, location.lat], radiusMeters / 1000, { units: 'kilometers' }).geometry;
+      setStudyAreaGeometry(circleGeom);
+      setIsFiltering(true);
+      try {
+        const data = await uehisClient.planting.filterUnits(selectedScenarioId, circleGeom);
+        setFilteredData(data as FilteredData);
+        recordActivity({
+          activity_type: 'analyzed_study_area',
+          category: 'planting',
+          action_type: 'analyzed',
+          title: `Filtered Planting Units at ${location.name}`,
+          description: `Identified candidate units within ${radiusMeters}m radius for scenario ${selectedScenarioId}.`,
+          entity_type: 'study_area',
+          entity_id: location.name,
+          metadata: {
+            scenario_id: selectedScenarioId,
+            lat: location.lat,
+            lng: location.lng,
+            radius: radiusMeters,
+          },
+        });
+      } catch (err) {
+        console.error('Failed to filter planting units for selected location:', err);
+        setFilteredData(null);
+      } finally {
+        setIsFiltering(false);
+      }
+    }
+  }, [selectedScenarioId]);
+
   const handleClearArea = useCallback(() => {
     setStudyAreaGeometry(null);
     setFilteredData(null);
+    setSearchResult(null);
   }, []);
 
   const handleBlockClick = useCallback(() => {}, []);
@@ -280,6 +352,14 @@ export default function PlantingPage() {
         </div>
 
         <div className={styles.controlsArea}>
+          {/* Location Search Bar in Planting Header */}
+          <div style={{ minWidth: '240px', maxWidth: '320px', flex: '1 1 240px' }}>
+            <Search
+              placeholder="Search locality in Pune to filter units..."
+              onLocationSelect={handleLocationSelect}
+            />
+          </div>
+
           <div className={styles.scenarioSelector}>
             <label className={styles.selectLabel}>Scenario Scale</label>
             <select 
@@ -346,8 +426,7 @@ export default function PlantingPage() {
               <div className={styles.metric}>
                 <span className={styles.metricLabel}>Est. Carbon</span>
                 <span className={styles.metricVal}>
-                  {isFiltering ? '...' : (filteredData.summary.total_units * 0.5).toLocaleString()} t CO₂e
-                </span>
+                  {isFiltering ? '...' : (filteredData.summary.total_units * 0.5).toLocaleString()} t CO₂e</span>
               </div>
               <button 
                 onClick={handleClearArea}
@@ -367,11 +446,12 @@ export default function PlantingPage() {
             onPlantingUnitClick={handlePlantingUnitClick}
             studyAreaGeometry={studyAreaGeometry}
             onAnalyzeStudyArea={handleAnalyzeStudyArea}
+            searchResult={searchResult}
             plantingConfig={plantingConfig}
             selectedUnitId={selectedUnit?.id || null}
             showUehi={false}
-            initialZoom={15}
-            initialCenter={INITIAL_CENTER}
+            initialZoom={searchResult ? 14 : 15}
+            initialCenter={searchResult ? [searchResult.lng, searchResult.lat] : INITIAL_CENTER}
           />
         </div>
         
@@ -381,5 +461,17 @@ export default function PlantingPage() {
         />
       </div>
     </div>
+  );
+}
+
+export default function PlantingPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ padding: '32px', fontFamily: 'var(--font-jetbrains-mono)', color: 'var(--primary)' }}>
+        Authenticating and loading planting intervention model...
+      </div>
+    }>
+      <PlantingPageContent />
+    </Suspense>
   );
 }

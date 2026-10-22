@@ -1,10 +1,30 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, Suspense, useMemo } from 'react';
-import { motion } from 'framer-motion';
 import { MapView } from '@/components/Map';
-import { RightPanel } from '@/components/RightPanel/RightPanel';
-import { uehisClient } from '@/lib/api/client';
+import { RightPanel, BlockResponse } from '@/components/RightPanel/RightPanel';
+import { uehisClient, APIError } from '@/lib/api/client';
+
+interface CarbonSummaryData {
+  carbon?: {
+    canopy_area_ha?: number;
+    canopy_area_km2?: number;
+    total_carbon?: number;
+    canopy_density_t_co2e_per_ha?: number;
+    gross_grid_density_t_co2e_per_ha?: number;
+    nonzero_blocks?: number;
+    tree_count?: number;
+    biomass_kg?: number;
+  };
+  [key: string]: unknown;
+}
+
+interface ExtendedBlockResponse extends BlockResponse {
+  canopy_coverage_pct?: number;
+  biomass_density_t_ha?: number;
+  carbon_density_t_ha?: number;
+  ward_name?: string;
+}
 import { recordActivity } from '@/lib/api/activity';
 import styles from './page.module.css';
 
@@ -17,7 +37,7 @@ const WARD_BIOTOPE_DATA = [
     canopyPct: '15.1%',
     stems: '1,248,300',
     stock: '134,812.50',
-    density: '23.16 t CO₂e/ha',
+    density: '231.64 t CO₂e/ha',
     risk: 'Critical Threat',
     riskColor: 'var(--risk-critical)'
   },
@@ -29,7 +49,7 @@ const WARD_BIOTOPE_DATA = [
     canopyPct: '10.1%',
     stems: '628,450',
     stock: '68,240.10',
-    density: '23.21 t CO₂e/ha',
+    density: '232.11 t CO₂e/ha',
     risk: 'High Encroach',
     riskColor: 'var(--risk-high)'
   },
@@ -41,7 +61,7 @@ const WARD_BIOTOPE_DATA = [
     canopyPct: '15.6%',
     stems: '745,000',
     stock: '91,480.80',
-    density: '26.82 t CO₂e/ha',
+    density: '268.27 t CO₂e/ha',
     risk: 'Protected Baseline',
     riskColor: 'var(--risk-low)'
   },
@@ -53,7 +73,7 @@ const WARD_BIOTOPE_DATA = [
     canopyPct: '9.8%',
     stems: '892,100',
     stock: '86,340.20',
-    density: '20.65 t CO₂e/ha',
+    density: '206.56 t CO₂e/ha',
     risk: 'High Encroach',
     riskColor: 'var(--risk-high)'
   },
@@ -65,7 +85,7 @@ const WARD_BIOTOPE_DATA = [
     canopyPct: '5.0%',
     stems: '382,000',
     stock: '38,120.40',
-    density: '20.94 t CO₂e/ha',
+    density: '209.45 t CO₂e/ha',
     risk: 'Critical Deficit',
     riskColor: 'var(--risk-critical)'
   },
@@ -77,7 +97,7 @@ const WARD_BIOTOPE_DATA = [
     canopyPct: '9.3%',
     stems: '484,200',
     stock: '51,890.30',
-    density: '23.06 t CO₂e/ha',
+    density: '230.62 t CO₂e/ha',
     risk: 'Moderate Stress',
     riskColor: 'var(--risk-moderate)'
   }
@@ -86,17 +106,22 @@ const WARD_BIOTOPE_DATA = [
 function CarbonContent() {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [blockLoading, setBlockLoading] = useState(false);
-  const [blockData, setBlockData] = useState<any | null>(null);
+  const [blockData, setBlockData] = useState<ExtendedBlockResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<any>(null);
+  const [summary, setSummary] = useState<CarbonSummaryData | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState(false);
   const [filterText, setFilterText] = useState('');
 
+  const canopyAreaHa = summary?.carbon?.canopy_area_ha ?? (summary?.carbon?.canopy_area_km2 ? summary.carbon.canopy_area_km2 * 100 : 2151.17);
+  const totalCarbon = summary?.carbon?.total_carbon ?? 493093.69;
+  const meanCanopyDensity = summary?.carbon?.canopy_density_t_co2e_per_ha ?? (canopyAreaHa > 0 ? (totalCarbon / canopyAreaHa) : 229.22);
+  const grossGridDensity = summary?.carbon?.gross_grid_density_t_co2e_per_ha ?? (totalCarbon / 33181.25);
+
   useEffect(() => {
     uehisClient.system.getSummary()
       .then(data => {
-        setSummary(data);
+        setSummary(data as CarbonSummaryData);
         setSummaryLoading(false);
       })
       .catch(err => {
@@ -136,18 +161,21 @@ function CarbonContent() {
           reopen_url: `/explore/block/${blockId}`,
         },
       });
-    } catch (err: any) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       console.error(err);
       setBlockData(null);
-      if (err.isNotFound || err.status === 404) {
+      const apiErr = err as APIError;
+      if (apiErr?.isNotFound || apiErr?.status === 404) {
         setError(`Block "${blockId}" not found in Pune study area.`);
-      } else if (err.isTimeout || err.status === 504) {
+      } else if (apiErr?.isTimeout || apiErr?.status === 504) {
         setError("Request timed out while loading carbon analysis. Please try again.");
-      } else if (err.isNetworkError) {
+      } else if (apiErr?.isNetworkError) {
         setError("Network connection error. Please check your connection and retry.");
-      } else {
+      } else if (err instanceof Error) {
         setError(err.message || "Block analysis is temporarily unavailable.");
+      } else {
+        setError("Block analysis is temporarily unavailable.");
       }
     } finally {
       setBlockLoading(false);
@@ -228,13 +256,13 @@ function CarbonContent() {
                 )}
               </div>
               <div className={styles.heroMetricCI}>
-                95% Confidence Interval: ±38,420 t CO₂e (±7.79%)
+                Model Sensitivity Range: ±38,420 t CO₂e (±7.79% illustrative)
               </div>
             </div>
 
             <div className={styles.heroMetricFooter}>
-              <span>ALLOMETRIC UNCERTAINTY: ±5.4%</span>
-              <span className={styles.heroMetricCalibrated}>CALIBRATED</span>
+              <span>ALLOMETRIC SENSITIVITY: ±5.4%</span>
+              <span className={styles.heroMetricCalibrated} style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--outline)', border: '1px solid var(--outline-variant)' }}>MODEL DERIVED</span>
             </div>
           </div>
         </div>
@@ -286,9 +314,9 @@ function CarbonContent() {
           <div className={styles.indicatorTile}>
             <span className={styles.indicatorTitle}>Mean Carbon Density</span>
             <div className={styles.indicatorValue}>
-              22.92 <span style={{ fontSize: '11px', fontWeight: 400 }}>t CO₂e/ha</span>
+              {meanCanopyDensity.toFixed(2)} <span style={{ fontSize: '11px', fontWeight: 400 }}>t CO₂e/ha</span>
             </div>
-            <span className={styles.indicatorSub}>Canopy weighted</span>
+            <span className={styles.indicatorSub}>Canopy normalized ({grossGridDensity.toFixed(2)} t/ha gross grid)</span>
           </div>
         </div>
       </section>
@@ -303,7 +331,7 @@ function CarbonContent() {
                 <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--secondary-fixed)' }}>
                   public
                 </span>
-                <span>Pune Biomass Carbon Density Raster</span>
+                <span>Pune Biomass Carbon Stock Raster</span>
               </div>
               <span className={styles.mapMastheadTag}>250m × 250m orthogonal grid</span>
             </div>
@@ -330,21 +358,21 @@ function CarbonContent() {
             {/* Restrained Cartographic Legend */}
             <div className={styles.legendBar}>
               <div className={styles.legendScale}>
-                <span>BIOMASS CARBON DENSITY (t C / ha)</span>
-                <span style={{ fontFamily: 'var(--font-jetbrains-mono)' }}>0 → 220+ t C/ha</span>
+                <span>STANDING CARBON STOCK (t CO₂e / 250m block)</span>
+                <span style={{ fontFamily: 'var(--font-jetbrains-mono)' }}>0 → 1,000+ t CO₂e</span>
               </div>
               <div className={styles.legendTrack}>
-                <div className={styles.legendStep} style={{ backgroundColor: '#faf9f4' }} title="0 - 10" />
-                <div className={styles.legendStep} style={{ backgroundColor: '#bbf7d0' }} title="10 - 45" />
-                <div className={styles.legendStep} style={{ backgroundColor: '#4ade80' }} title="45 - 90" />
-                <div className={styles.legendStep} style={{ backgroundColor: '#16a34a' }} title="90 - 150" />
-                <div className={styles.legendStep} style={{ backgroundColor: '#166534' }} title="150+" />
+                <div className={styles.legendStep} style={{ backgroundColor: '#e5e7eb' }} title="0 t CO₂e" />
+                <div className={styles.legendStep} style={{ backgroundColor: '#bbf7d0' }} title="10 t CO₂e" />
+                <div className={styles.legendStep} style={{ backgroundColor: '#4ade80' }} title="100 t CO₂e" />
+                <div className={styles.legendStep} style={{ backgroundColor: '#16a34a' }} title="500 t CO₂e" />
+                <div className={styles.legendStep} style={{ backgroundColor: '#166534' }} title="1,000+ t CO₂e" />
               </div>
               <div className={styles.legendLabels}>
-                <span>0 (Built)</span>
-                <span>45 (Sparse Canopy)</span>
-                <span>110 (Mixed Tekdi)</span>
-                <span>180+ (Dense Canopy)</span>
+                <span>0 (Non-vegetated)</span>
+                <span>10 (Sparse)</span>
+                <span>100 (Moderate)</span>
+                <span>500+ (Dense Forest)</span>
               </div>
             </div>
           </div>
@@ -363,32 +391,30 @@ function CarbonContent() {
                   <line x1="40" y1="55" x2="310" y2="55" stroke="var(--outline-variant)" strokeDasharray="2 2" />
                   <line x1="40" y1="90" x2="310" y2="90" stroke="var(--outline-variant)" strokeDasharray="2 2" />
                   <line x1="40" y1="125" x2="310" y2="125" stroke="var(--outline)" />
-                  <text x="5" y="24" fill="var(--outline)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">180k t</text>
-                  <text x="5" y="59" fill="var(--outline)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">120k t</text>
-                  <text x="5" y="94" fill="var(--outline)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">60k t</text>
+                  <text x="5" y="24" fill="var(--outline)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">250k t</text>
+                  <text x="5" y="59" fill="var(--outline)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">170k t</text>
+                  <text x="5" y="94" fill="var(--outline)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">80k t</text>
                   <text x="18" y="129" fill="var(--outline)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">0</text>
                   {/* Bars */}
-                  <rect x="55" y="85" width="34" height="40" fill="#c5c6d0" />
-                  <rect x="105" y="50" width="34" height="75" fill="#8193cb" />
-                  <rect x="155" y="25" width="34" height="100" fill="#006d3c" />
-                  <rect x="205" y="38" width="34" height="87" fill="#172b5c" />
-                  <rect x="255" y="95" width="34" height="30" fill="#531c00" />
+                  <rect x="60" y="103" width="42" height="22" fill="#c5c6d0" />
+                  <rect x="120" y="73" width="42" height="52" fill="#8193cb" />
+                  <rect x="180" y="23" width="42" height="102" fill="#006d3c" />
+                  <rect x="240" y="94" width="42" height="31" fill="#172b5c" />
                   {/* Labels */}
-                  <text x="56" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">0-5m</text>
-                  <text x="104" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">5-10m</text>
-                  <text x="153" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">10-15m</text>
-                  <text x="203" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">15-22m</text>
-                  <text x="258" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">&gt;22m</text>
+                  <text x="66" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">0-5m</text>
+                  <text x="124" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">5-10m</text>
+                  <text x="182" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">10-15m</text>
+                  <text x="242" y="140" fill="var(--on-surface-variant)" fontSize="9" fontFamily="var(--font-jetbrains-mono)">15-20m</text>
                 </svg>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontFamily: 'var(--font-jetbrains-mono)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 6px', backgroundColor: 'var(--surface)' }}>
                   <span>Dominant Reservoir:</span>
-                  <strong style={{ color: 'var(--primary)' }}>10–15m Class (184.2k t CO₂e)</strong>
+                  <strong style={{ color: 'var(--primary)' }}>10–15m Class (242.4k t CO₂e, 49.2%)</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 6px', backgroundColor: 'var(--surface)' }}>
-                  <span>Upper Strata (&gt;22m):</span>
-                  <strong style={{ color: 'var(--primary)' }}>42.1k t CO₂e (8.5%)</strong>
+                  <span>Upper Strata (15–20m):</span>
+                  <strong style={{ color: 'var(--primary)' }}>73.7k t CO₂e (14.9%, max 18.6m)</strong>
                 </div>
               </div>
             </div>
@@ -396,13 +422,13 @@ function CarbonContent() {
             {/* Field Validation Network Card */}
             <div className={styles.validationCard}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span className={styles.chartTitle}>Field Validation Network</span>
-                <span style={{ backgroundColor: 'var(--secondary-fixed)', color: 'var(--on-secondary-fixed)', fontFamily: 'var(--font-jetbrains-mono)', fontSize: '10px', padding: '1px 6px', fontWeight: 600 }}>
-                  R² = 0.884
+                <span className={styles.chartTitle}>In-Situ Validation Status</span>
+                <span style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--outline)', fontFamily: 'var(--font-jetbrains-mono)', fontSize: '10px', padding: '1px 6px', fontWeight: 600, border: '1px solid var(--outline-variant)' }}>
+                  UNESTABLISHED
                 </span>
               </div>
               <div style={{ fontSize: '12px', lineHeight: 1.45, color: 'var(--on-surface-variant)' }}>
-                148 validated circular permanent sample plots (0.1 ha) across Vetal Tekdi, Empress Garden, and SPPU Botanical Reserve. Mean Height Bias: -0.42m; RMSE: 1.83m.
+                Independent in-situ field plot validation has not yet been established for Pune. Canopy height and biomass values are derived from spaceborne ETH Global Canopy Height 2020 and McPherson et al. (2016) urban broadleaf allometry without empirical on-ground plot recalibration.
               </div>
             </div>
 
@@ -451,7 +477,7 @@ function CarbonContent() {
                   <th style={{ textAlign: 'right' }}>Canopy Area (km²)</th>
                   <th style={{ textAlign: 'right' }}>Stem Count</th>
                   <th style={{ textAlign: 'right' }}>Biomass Stock (t CO₂e)</th>
-                  <th style={{ textAlign: 'right' }}>Mean Carbon Density</th>
+                  <th style={{ textAlign: 'right' }}>Carbon Density (t CO₂e/ha canopy)</th>
                   <th style={{ textAlign: 'center' }}>Biotope Risk Rating</th>
                 </tr>
               </thead>

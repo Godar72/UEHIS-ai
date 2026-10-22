@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import Map, { Source, Layer, Popup, MapRef } from 'react-map-gl/maplibre';
+import Map, { Source, Layer, Popup, Marker, MapRef, MapLayerMouseEvent, ViewStateChangeEvent, ErrorEvent } from 'react-map-gl/maplibre';
+import type { PlantingUnitProps } from '@/components/PlantingDetail/PlantingDetail';
 import circle from '@turf/circle';
 import area from '@turf/area';
 import * as maplibregl from 'maplibre-gl';
@@ -18,14 +19,14 @@ const CARBON_TILES = ['/tiles/carbon/{z}/{x}/{y}.pbf'];
 const PLANTING_AREAS_TILES = ['/tiles/planting-areas/{z}/{x}/{y}.pbf'];
 const INTERACTIVE_LAYER_IDS = ['uehi-layer', 'carbon-layer', 'planting-units-layer', 'planting-areas-layer'];
 
-const MODEL_COVERAGE_LINE_PAINT: any = {
+const MODEL_COVERAGE_LINE_PAINT: Record<string, unknown> = {
   'line-color': '#FFFFFF',
   'line-width': 1.5,
   'line-dasharray': [3, 3],
   'line-opacity': 0.6
 };
 
-const MODEL_COVERAGE_LABEL_LAYOUT: any = {
+const MODEL_COVERAGE_LABEL_LAYOUT: Record<string, unknown> = {
   'symbol-placement': 'line',
   'text-field': 'Model Coverage',
   'text-size': 12,
@@ -35,69 +36,23 @@ const MODEL_COVERAGE_LABEL_LAYOUT: any = {
   'text-max-angle': 30
 };
 
-const MODEL_COVERAGE_LABEL_PAINT: any = {
+const MODEL_COVERAGE_LABEL_PAINT: Record<string, unknown> = {
   'text-color': '#FFFFFF',
   'text-opacity': 0.8,
   'text-halo-color': 'rgba(0,0,0,0.6)',
   'text-halo-width': 1
 };
 
-const UEHI_FILL_PAINT: any = {
-  'fill-color': [
-    'match',
-    ['get', 'risk_level'],
-    'Critical', '#A83D32',
-    'High', '#D5682D',
-    'Moderate', '#B28A36',
-    'Low', '#3D7650',
-    '#cccccc'
-  ],
-  'fill-opacity': [
-    'case',
-    ['boolean', ['feature-state', 'selected'], false],
-    0.5,
-    0.15
-  ]
-};
+// Dynamic vector tile paint properties are memoized inside MapViewComponent 
+// to dynamically match selectedBlockId and layer visibility flags.
 
-const UEHI_SELECTED_LINE_PAINT: any = {
-  'line-color': '#FFFFFF',
-  'line-width': 2,
-  'line-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 1, 0]
-};
-
-const CARBON_FILL_PAINT: any = {
-  'fill-color': [
-    'interpolate',
-    ['linear'],
-    ['get', 'standing_carbon_stock_tonnes_co2e'],
-    0, '#e5e7eb',
-    10, '#bbf7d0',
-    100, '#4ade80',
-    500, '#16a34a',
-    1000, '#166534'
-  ],
-  'fill-opacity': [
-    'case',
-    ['boolean', ['feature-state', 'selected'], false],
-    0.7,
-    0.4
-  ]
-};
-
-const CARBON_SELECTED_LINE_PAINT: any = {
-  'line-color': '#FFFFFF',
-  'line-width': 2,
-  'line-opacity': ['case', ['boolean', ['feature-state', 'selected'], false], 1, 0]
-};
-
-const PLANTING_AREAS_FILL_PAINT: any = {
+const PLANTING_AREAS_FILL_PAINT: Record<string, unknown> = {
   'fill-color': '#FEF3C7',
   'fill-opacity': 0.6,
   'fill-outline-color': '#FDE68A'
 };
 
-const PLANTING_UNITS_CIRCLE_PAINT: any = {
+const PLANTING_UNITS_CIRCLE_PAINT: Record<string, unknown> = {
   'circle-color': '#3D7650',
   'circle-radius': [
     'interpolate', ['linear'], ['zoom'],
@@ -108,7 +63,7 @@ const PLANTING_UNITS_CIRCLE_PAINT: any = {
   'circle-stroke-color': '#ffffff'
 };
 
-const FILTERED_PLANTING_UNITS_CIRCLE_PAINT: any = {
+const FILTERED_PLANTING_UNITS_CIRCLE_PAINT: Record<string, unknown> = {
   'circle-color': '#3D7650',
   'circle-radius': [
     'interpolate', ['linear'], ['zoom'],
@@ -119,39 +74,39 @@ const FILTERED_PLANTING_UNITS_CIRCLE_PAINT: any = {
   'circle-stroke-color': '#ffffff'
 };
 
-const STUDY_AREA_FILL_PAINT: any = {
+const STUDY_AREA_FILL_PAINT: Record<string, unknown> = {
   'fill-color': '#F36B24',
   'fill-opacity': 0.1
 };
 
-const STUDY_AREA_OUTLINE_PAINT: any = {
+const STUDY_AREA_OUTLINE_PAINT: Record<string, unknown> = {
   'line-color': '#F36B24',
   'line-width': 3
 };
 
-const PREVIEW_CIRCLE_FILL_PAINT: any = {
+const PREVIEW_CIRCLE_FILL_PAINT: Record<string, unknown> = {
   'fill-color': '#F36B24',
   'fill-opacity': 0.2
 };
 
-const PREVIEW_CIRCLE_OUTLINE_PAINT: any = {
+const PREVIEW_CIRCLE_OUTLINE_PAINT: Record<string, unknown> = {
   'line-color': '#F36B24',
   'line-width': 2,
   'line-dasharray': [2, 2]
 };
 
-const DRAW_FILL_PAINT: any = {
+const DRAW_FILL_PAINT: Record<string, unknown> = {
   'fill-color': '#F36B24',
   'fill-opacity': 0.3
 };
 
-const DRAW_LINE_PAINT: any = {
+const DRAW_LINE_PAINT: Record<string, unknown> = {
   'line-color': '#F36B24',
   'line-width': 3,
   'line-dasharray': [2, 2]
 };
 
-const SELECTED_PLANTING_UNIT_PAINT: any = {
+const SELECTED_PLANTING_UNIT_PAINT: Record<string, unknown> = {
   'circle-color': '#3D7650',
   'circle-radius': 6,
   'circle-stroke-width': 3,
@@ -182,23 +137,43 @@ function latLonToUTM(lat: number, lon: number) {
 
 
 
+export interface PlantingUnitClickData {
+  id: string;
+  unitUuid?: string;
+  parentBlockId: string;
+  lat: number;
+  lng: number;
+  easting: number;
+  northing: number;
+  zone: number;
+  scenario: string;
+  opportunityClass: string | null;
+  uehi: number | null;
+  riskLevel: string | null;
+  waterDistance: number | null;
+  ownershipStatus: string;
+  utilityStatus: string;
+  permissionStatus: string;
+  carbonAssumption: string;
+}
+
 interface MapViewProps {
   onBlockClick: (blockId: string) => void;
-  studyAreaGeometry?: any;
-  onAnalyzeStudyArea?: (geometry: any, name: string, type: string) => void;
-  searchResult?: { lat: number, lng: number, name: string, type: string } | null;
+  studyAreaGeometry?: GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection | null;
+  onAnalyzeStudyArea?: (geometry: GeoJSON.Geometry | GeoJSON.Feature, name: string, type: string) => void;
+  searchResult?: { lat: number; lng: number; name: string; type: string; inCoverage?: boolean } | null;
   plantingConfig?: {
     showAreas: boolean;
     showUnits: boolean;
     scenarioId: string | null;
     scenarioName?: string;
-    filteredGeoJson?: any;
+    filteredGeoJson?: GeoJSON.FeatureCollection | null;
   };
   showUehi?: boolean;
   showCarbon?: boolean;
   selectedBlockId?: string | null;
   selectedUnitId?: string | null;
-  onPlantingUnitClick?: (unit: any) => void;
+  onPlantingUnitClick?: (unit: PlantingUnitProps) => void;
   initialZoom?: number;
   initialCenter?: [number, number];
   cooperativeGestures?: boolean;
@@ -241,16 +216,76 @@ function MapViewComponent({
 
   const mapContainerStyle = useMemo(() => ({ width: '100%', height: '100%' }), []);
 
-  const [selectedPoint, setSelectedPoint] = useState<{ lng: number; lat: number, name?: string, popupContent?: any, isPlantingUnit?: boolean } | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<{ lng: number; lat: number, name?: string, popupContent?: React.ReactNode, isPlantingUnit?: boolean } | null>(null);
   const [previewRadius, setPreviewRadius] = useState<number>(2000); // 2km default
 
   const [drawMode, setDrawMode] = useState(false);
   const drawModeRef = useRef(drawMode);
-  drawModeRef.current = drawMode;
+  useEffect(() => {
+    drawModeRef.current = drawMode;
+  }, [drawMode]);
   const [drawVertices, setDrawVertices] = useState<[number, number][]>([]);
-  const [pendingPolygon, setPendingPolygon] = useState<any>(null);
+  const [pendingPolygon, setPendingPolygon] = useState<GeoJSON.Polygon | null>(null);
 
-  const [cursor, setCursor] = useState<string>('auto');
+  // Dynamic paints matching selectedBlockId via GeoJSON properties
+  const uehiFillPaint: Record<string, unknown> = useMemo(() => ({
+    'fill-color': [
+      'match',
+      ['get', 'risk_level'],
+      'Critical', '#A83D32',
+      'High', '#D5682D',
+      'Moderate', '#B28A36',
+      'Low', '#3D7650',
+      '#cccccc'
+    ],
+    'fill-opacity': [
+      'case',
+      ['==', ['get', 'block_id'], selectedBlockId || ''],
+      0.5,
+      showUehi ? 0.25 : 0
+    ]
+  }), [selectedBlockId, showUehi]);
+
+  const uehiSelectedLinePaint: Record<string, unknown> = useMemo(() => ({
+    'line-color': '#FFFFFF',
+    'line-width': 2.5,
+    'line-opacity': [
+      'case',
+      ['==', ['get', 'block_id'], selectedBlockId || ''],
+      1,
+      0
+    ]
+  }), [selectedBlockId]);
+
+  const carbonFillPaint: Record<string, unknown> = useMemo(() => ({
+    'fill-color': [
+      'interpolate',
+      ['linear'],
+      ['get', 'standing_carbon_stock_tonnes_co2e'],
+      0, '#e5e7eb',
+      10, '#bbf7d0',
+      100, '#4ade80',
+      500, '#16a34a',
+      1000, '#166534'
+    ],
+    'fill-opacity': [
+      'case',
+      ['==', ['get', 'block_id'], selectedBlockId || ''],
+      0.7,
+      showCarbon ? 0.35 : 0
+    ]
+  }), [selectedBlockId, showCarbon]);
+
+  const carbonSelectedLinePaint: Record<string, unknown> = useMemo(() => ({
+    'line-color': '#FFFFFF',
+    'line-width': 2.5,
+    'line-opacity': [
+      'case',
+      ['==', ['get', 'block_id'], selectedBlockId || ''],
+      1,
+      0
+    ]
+  }), [selectedBlockId]);
 
   const [basemap, setBasemap] = useState<'satellite' | 'light'>('satellite');
   const [imageryError, setImageryError] = useState<string | null>(null);
@@ -270,30 +305,43 @@ function MapViewComponent({
     return [`/tiles/planting-units/${plantingConfig.scenarioId}/{z}/{x}/{y}.pbf`];
   }, [plantingConfig?.scenarioId]);
 
-  useEffect(() => {
+  const [prevSelectedUnitId, setPrevSelectedUnitId] = useState(selectedUnitId);
+  if (selectedUnitId !== prevSelectedUnitId) {
+    setPrevSelectedUnitId(selectedUnitId);
     if (!selectedUnitId && selectedPoint?.isPlantingUnit) {
       setSelectedPoint(null);
     }
-  }, [selectedUnitId]);
+  }
 
-  useEffect(() => {
+  const [prevScenarioId, setPrevScenarioId] = useState(plantingConfig?.scenarioId);
+  if (plantingConfig?.scenarioId !== prevScenarioId) {
+    setPrevScenarioId(plantingConfig?.scenarioId);
     setSelectedPoint(null);
-  }, [plantingConfig?.scenarioId]);
+  }
+
+  const [showSearchLocationPopup, setShowSearchLocationPopup] = useState(false);
 
   useEffect(() => {
-    if (searchResult && mapRef.current) {
-      mapRef.current.flyTo({
-        center: [searchResult.lng, searchResult.lat],
-        zoom: 13.5,
-        duration: 1200
+    if (searchResult) {
+      if (mapRef.current) {
+        mapRef.current.flyTo({
+          center: [searchResult.lng, searchResult.lat],
+          zoom: 14,
+          duration: 1200
+        });
+      }
+      queueMicrotask(() => {
+        setShowSearchLocationPopup(false);
+        setSelectedPoint({ lng: searchResult.lng, lat: searchResult.lat, name: searchResult.name });
       });
     }
   }, [searchResult]);
 
-  const handleMapError = useCallback((e: any) => {
-    const errorUrl = e?.error?.url || '';
+  const handleMapError = useCallback((e: ErrorEvent) => {
+    const err = e.error as (Error & { url?: string; status?: number }) | undefined;
+    const errorUrl = err?.url || '';
     const isMapTilerBasemapError = typeof errorUrl === 'string' && errorUrl.includes('api.maptiler.com/maps/');
-    if (basemap === 'satellite' && isMapTilerBasemapError && (e?.error?.status === 401 || e?.error?.status === 403)) {
+    if (basemap === 'satellite' && isMapTilerBasemapError && (err?.status === 401 || err?.status === 403)) {
       console.warn('MapTiler imagery failed to load. Falling back to Light basemap.', e.error);
       setImageryError('Satellite imagery unavailable. Using Light basemap.');
       setBasemap('light');
@@ -301,9 +349,9 @@ function MapViewComponent({
   }, [basemap]);
 
   // Sync testMap reference immediately on map load
-  const handleMapLoad = useCallback((evt: any) => {
+  const handleMapLoad = useCallback((evt: maplibregl.MapLibreEvent) => {
     if (typeof window !== 'undefined') {
-      (window as any).testMap = evt.target;
+      (window as unknown as { testMap?: maplibregl.Map }).testMap = evt.target;
     }
     if (searchResult && evt.target) {
       evt.target.flyTo({
@@ -315,7 +363,7 @@ function MapViewComponent({
   }, [searchResult]);
 
   // Discrete threshold-based camera event handler: ONLY dispatches React state when crossing thresholds
-  const handleMove = useCallback((evt: any) => {
+  const handleMove = useCallback((evt: ViewStateChangeEvent) => {
     const { zoom, longitude, latitude } = evt.viewState;
     const zoomedOut = zoom < 14;
     const outside = longitude < 73.749344 || longitude > 74.021411 || latitude < 18.428852 || latitude > 18.621015;
@@ -330,14 +378,7 @@ function MapViewComponent({
     }
   }, []);
 
-  useEffect(() => {
-    if (searchResult) {
-      if (mapRef.current) {
-        mapRef.current.flyTo({ center: [searchResult.lng, searchResult.lat], zoom: 14, duration: 1500 });
-      }
-      setSelectedPoint({ lng: searchResult.lng, lat: searchResult.lat, name: searchResult.name });
-    }
-  }, [searchResult]);
+
 
   useEffect(() => {
     const map = mapRef.current?.getMap();
@@ -360,7 +401,7 @@ function MapViewComponent({
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (map && typeof window !== 'undefined') {
-      (window as any).testMap = map;
+      (window as unknown as { testMap?: maplibregl.Map }).testMap = map;
     }
   }, []);
 
@@ -382,7 +423,7 @@ function MapViewComponent({
   }, [plantingConfig?.showUnits]);
 
   // Single consolidated click handler for all interactive layers
-  const onClick = useCallback((event: any) => {
+  const onClick = useCallback((event: MapLayerMouseEvent) => {
     if (drawMode) {
       setDrawVertices(prev => [...prev, [event.lngLat.lng, event.lngLat.lat]]);
       return;
@@ -390,11 +431,11 @@ function MapViewComponent({
 
     const map = event.target || mapRef.current?.getMap();
     // Prioritize planting units over underlying polygon areas
-    let feature = event.features?.find((f: any) => f.layer.id === 'planting-units-layer');
+    let feature = event.features?.find((f: maplibregl.MapGeoJSONFeature) => f.layer.id === 'planting-units-layer');
     
     // Resilient fallback query with 6px tolerance for precise touch & click targeting on points
     if (!feature && map && event.point) {
-      const bbox: any = [
+      const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
         [event.point.x - 6, event.point.y - 6],
         [event.point.x + 6, event.point.y + 6]
       ];
@@ -409,7 +450,7 @@ function MapViewComponent({
     }
 
     if (!feature && map && event.point) {
-      const bbox: any = [
+      const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
         [event.point.x - 6, event.point.y - 6],
         [event.point.x + 6, event.point.y + 6]
       ];
@@ -426,13 +467,14 @@ function MapViewComponent({
         let exactLng = event.lngLat.lng;
         let exactLat = event.lngLat.lat;
         
-        if (unitFeature.geometry && unitFeature.geometry.coordinates) {
-          if (typeof unitFeature.geometry.coordinates[0] === 'number') {
-            exactLng = unitFeature.geometry.coordinates[0];
-            exactLat = unitFeature.geometry.coordinates[1];
-          } else if (Array.isArray(unitFeature.geometry.coordinates[0]) && typeof unitFeature.geometry.coordinates[0][0] === 'number') {
-            exactLng = unitFeature.geometry.coordinates[0][0];
-            exactLat = unitFeature.geometry.coordinates[0][1];
+        if (unitFeature.geometry && 'coordinates' in unitFeature.geometry) {
+          const coords = (unitFeature.geometry as GeoJSON.Point).coordinates;
+          if (Array.isArray(coords) && typeof coords[0] === 'number') {
+            exactLng = coords[0];
+            exactLat = coords[1];
+          } else if (Array.isArray(coords) && Array.isArray(coords[0]) && typeof (coords[0] as number[])[0] === 'number') {
+            exactLng = (coords[0] as number[])[0];
+            exactLat = (coords[0] as number[])[1];
           }
         } else if (unitFeature.properties && unitFeature.properties.lng) {
           exactLng = unitFeature.properties.lng;
@@ -456,7 +498,7 @@ function MapViewComponent({
             northing: utm.northing,
             zone: utm.zoneNumber,
             scenario: plantingConfig?.scenarioName || 'Unknown',
-            opportunityClass: null,
+            opportunityClass: 'Unknown',
             uehi: null,
             riskLevel: null,
             waterDistance: null,
@@ -571,7 +613,7 @@ function MapViewComponent({
     setPendingPolygon(null);
   }, []);
 
-  const drawGeoJson: any = useMemo(() => {
+  const drawGeoJson: GeoJSON.Feature | null = useMemo(() => {
     if (drawVertices.length === 0) return null;
     if (drawVertices.length > 2) {
       return {
@@ -702,31 +744,29 @@ function MapViewComponent({
           />
         </Source>
 
-        {/* UEHI Layer */}
-        {showUehi && (
-          <Source
-            id="uehi"
-            type="vector"
-            tiles={UEHI_TILES}
-            minzoom={10}
-            maxzoom={16}
-          >
-            <Layer
-              id="uehi-layer"
-              type="fill"
-              source="uehi"
-              source-layer="uehi"
-              paint={UEHI_FILL_PAINT}
-            />
-            <Layer
-              id="uehi-selected-layer"
-              type="line"
-              source="uehi"
-              source-layer="uehi"
-              paint={UEHI_SELECTED_LINE_PAINT}
-            />
-          </Source>
-        )}
+        {/* UEHI Layer — Always mounted so block clicking works; opacity is 0 when showUehi is false except for selected block */}
+        <Source
+          id="uehi"
+          type="vector"
+          tiles={UEHI_TILES}
+          minzoom={10}
+          maxzoom={16}
+        >
+          <Layer
+            id="uehi-layer"
+            type="fill"
+            source="uehi"
+            source-layer="uehi"
+            paint={uehiFillPaint}
+          />
+          <Layer
+            id="uehi-selected-layer"
+            type="line"
+            source="uehi"
+            source-layer="uehi"
+            paint={uehiSelectedLinePaint}
+          />
+        </Source>
 
         {/* Carbon Layer */}
         {showCarbon && (
@@ -742,14 +782,14 @@ function MapViewComponent({
               type="fill"
               source="carbon"
               source-layer="carbon"
-              paint={CARBON_FILL_PAINT}
+              paint={carbonFillPaint}
             />
             <Layer
               id="carbon-selected-layer"
               type="line"
               source="carbon"
               source-layer="carbon"
-              paint={CARBON_SELECTED_LINE_PAINT}
+              paint={carbonSelectedLinePaint}
             />
           </Source>
         )}
@@ -806,7 +846,7 @@ function MapViewComponent({
 
         {/* Study Area Final Polygon */}
         {(studyAreaGeometry || pendingPolygon) && !drawMode && (
-          <Source id="study-area" type="geojson" data={studyAreaGeometry || pendingPolygon}>
+          <Source id="study-area" type="geojson" data={(studyAreaGeometry || pendingPolygon) as GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection}>
             <Layer
               id="study-area-fill"
               type="fill"
@@ -910,6 +950,85 @@ function MapViewComponent({
                 </button>
               </div>
             )}
+          </Popup>
+        )}
+
+        {/* Selected Search Location Marker */}
+        {searchResult && (
+          <Marker
+            longitude={searchResult.lng}
+            latitude={searchResult.lat}
+            anchor="bottom"
+            onClick={(e) => {
+              e.originalEvent.stopPropagation();
+              setShowSearchLocationPopup((prev) => !prev);
+            }}
+          >
+            <div
+              className={styles.searchMarker}
+              title={`Selected Location: ${searchResult.name}`}
+              aria-label={`Selected Location: ${searchResult.name}`}
+              role="button"
+              tabIndex={0}
+            >
+              <div className={styles.searchMarkerPulse} />
+              <div className={styles.searchMarkerPin}>
+                <div className={styles.searchMarkerCore} />
+              </div>
+              <div className={styles.searchMarkerLabel}>
+                {searchResult.name}
+              </div>
+            </div>
+          </Marker>
+        )}
+
+        {/* Selected Location Details Popup */}
+        {searchResult && showSearchLocationPopup && (
+          <Popup
+            longitude={searchResult.lng}
+            latitude={searchResult.lat}
+            anchor="top"
+            offset={14}
+            onClose={() => setShowSearchLocationPopup(false)}
+            closeOnClick={false}
+          >
+            <div style={{ padding: '8px 10px', maxWidth: '240px', fontFamily: 'var(--font-ibm-plex-sans)' }}>
+              <div style={{
+                fontSize: '9px',
+                fontFamily: 'var(--font-jetbrains-mono)',
+                color: 'var(--seer-orange, #F36B24)',
+                fontWeight: 700,
+                letterSpacing: '0.05em',
+                marginBottom: '2px'
+              }}>
+                SEARCH ORIGIN TARGET
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--seer-navy, #172B5C)' }}>
+                {searchResult.name}
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--on-surface-variant)', fontFamily: 'var(--font-jetbrains-mono)', margin: '4px 0' }}>
+                {searchResult.lat.toFixed(5)}°N, {searchResult.lng.toFixed(5)}°E
+              </div>
+              <div style={{
+                fontSize: '10px',
+                lineHeight: 1.35,
+                color: 'var(--muted, #65706B)',
+                borderTop: '1px solid var(--border, #D9DDD7)',
+                paddingTop: '4px',
+                marginTop: '4px'
+              }}>
+                Origin coordinates for spatial buffer evaluation. Distinct from 250m model computational blocks.
+              </div>
+              <div style={{
+                marginTop: '6px',
+                fontSize: '9px',
+                fontFamily: 'var(--font-jetbrains-mono)',
+                color: searchResult.inCoverage === false ? 'var(--risk-critical)' : 'var(--uehis-green, #2E9B5F)',
+                fontWeight: 600
+              }}>
+                {searchResult.inCoverage === false ? '● OUTSIDE EVALUATED EXTENT' : '● WITHIN MODEL COVERAGE'}
+              </div>
+            </div>
           </Popup>
         )}
       </Map>

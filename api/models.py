@@ -108,6 +108,7 @@ class BlockResponse(BaseModel):
     canopy_volume: float | None = None
     agb_kg: float | None = None
     co2_tonnes: float | None = None
+    carbon_details: dict[str, Any] | None = None
     geojson: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}

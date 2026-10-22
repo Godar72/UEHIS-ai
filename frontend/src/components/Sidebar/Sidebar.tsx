@@ -5,7 +5,7 @@ import styles from './sidebar.module.css';
 import { Search } from './Search';
 
 interface SidebarProps {
-  onAnalyzeStudyArea?: (geometry: unknown, name: string, type: string) => void;
+  onAnalyzeStudyArea?: (geometry: GeoJSON.Geometry | GeoJSON.Feature, name: string, type: string) => void;
   onLocationSelect?: (location: { lat: number; lng: number; name: string; type: string }) => void;
   layers?: {
     uehi: boolean;
@@ -138,21 +138,21 @@ export function Sidebar({ onLocationSelect, layers = { uehi: true }, onToggleLay
               <div className={styles.legendSwatch} style={{ backgroundColor: 'var(--risk-high)' }}></div>
               <span className={styles.legendLabel}>HIGH VULNERABILITY</span>
             </div>
-            <span className={styles.legendRange}>25.1 – 45.0</span>
+            <span className={styles.legendRange}>25.0 – 50.0</span>
           </div>
           <div className={styles.legendRow}>
             <div className={styles.legendLeft}>
               <div className={styles.legendSwatch} style={{ backgroundColor: 'var(--risk-moderate)' }}></div>
               <span className={styles.legendLabel}>MODERATE STRESS</span>
             </div>
-            <span className={styles.legendRange}>45.1 – 65.0</span>
+            <span className={styles.legendRange}>50.0 – 75.0</span>
           </div>
           <div className={styles.legendRow}>
             <div className={styles.legendLeft}>
               <div className={styles.legendSwatch} style={{ backgroundColor: 'var(--risk-low)' }}></div>
               <span className={styles.legendLabel}>LOW RISK / STABLE</span>
             </div>
-            <span className={styles.legendRange}>65.1 – 100.0</span>
+            <span className={styles.legendRange}>75.0 – 100.0</span>
           </div>
           <div className={styles.legendRow}>
             <div className={styles.legendLeft}>

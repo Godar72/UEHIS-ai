@@ -529,4 +529,227 @@
   background-color: var(--surface-container-highest);
 }
 
+.tabBar {
+  display: flex;
+  background-color: var(--surface-container-low);
+  border-bottom: 1px solid var(--outline-variant);
+  flex-shrink: 0;
+}
+
+.tabBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tabBtn:hover {
+  color: var(--primary);
+  background-color: var(--surface-container);
+}
+
+.tabBtnActive {
+  color: var(--primary) !important;
+  border-bottom-color: var(--primary) !important;
+  background-color: var(--surface-container-lowest) !important;
+}
+
+.candidateList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.candidateCard {
+  background-color: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-left: 4px solid var(--primary);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.candidateCard:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 6px rgba(0, 21, 68, 0.08);
+}
+
+.candidateHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.candidateHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.candidateRankBadge {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+}
+
+.candidateBlockId {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.candidateRiskBadge {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+}
+
+.candidateIndicators {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background-color: var(--surface-container);
+  padding: 6px 8px;
+  border: 1px solid var(--surface-container-high);
+}
+
+.indicatorItem {
+  display: flex;
+  flex-direction: column;
+}
+
+.indicatorLabel {
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 9px;
+  color: var(--outline);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.indicatorVal {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.explanationBox {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  padding: 6px 8px;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--on-surface-variant);
+}
+
+.feasibilityTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.feasibilityBadge {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  padding: 2px 5px;
+  background-color: var(--surface-container);
+  color: var(--on-surface-variant);
+  border: 1px solid var(--outline-variant);
+}
+
+.candidateActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.inspectBlockBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background-color: var(--surface-container-high);
+  color: var(--primary);
+  border: 1px solid var(--outline-variant);
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.inspectBlockBtn:hover {
+  background-color: var(--primary);
+  color: var(--on-primary);
+}
+
+.compareCheckLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-ibm-plex-sans), sans-serif;
+  font-size: 10px;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+  user-select: none;
+}
+
+.compareDrawer {
+  background-color: var(--surface-container-lowest);
+  border: 1px solid var(--outline-variant);
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.compareTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+  font-family: var(--font-jetbrains-mono), monospace;
+  margin-top: 6px;
+}
+
+.compareTable th, .compareTable td {
+  padding: 4px 6px;
+  border: 1px solid var(--outline-variant);
+  text-align: left;
+}
+
+.compareTable th {
+  background-color: var(--surface-container);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+
 

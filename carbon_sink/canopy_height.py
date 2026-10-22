@@ -456,9 +456,9 @@ def compute_block_co2(
         Input dataframe with added columns:
         ``canopy_area_m2``, ``canopy_area_source``,
         ``canopy_height_m``, ``canopy_height_source``, ``n_trees_est``,
-        ``agb_kg``, ``carbon_stock_tonnes_co2e``,
-        ``carbon_tons_sequestered`` (backward-compatible alias),
-        ``carbon_model_source``, ``allometric_model``.
+        agb_kg, carbon_stock_tonnes_co2e, standing_carbon_stock_tonnes_co2e,
+        carbon_tons_sequestered (deprecated alias for static standing stock; not annual flux),
+        carbon_model_source, allometric_model.
     """
     result = blocks_df.copy()
 
@@ -494,7 +494,10 @@ def compute_block_co2(
     result["agb_kg"] = np.round(total_agb_kg, 2)
     result["carbon_stock_tonnes_co2e"] = np.round(co2_tonnes, 4)
 
-    # Backward-compatible alias — NOTE: this is STOCK, not annual rate
+    # Canonical standing-stock field matching PostGIS standing_carbon_stock
+    result["standing_carbon_stock_tonnes_co2e"] = result["carbon_stock_tonnes_co2e"]
+
+    # Backward-compatible alias — DEPRECATED: represents static standing STOCK, NOT annual sequestration flux
     result["carbon_tons_sequestered"] = result["carbon_stock_tonnes_co2e"]
 
     # ── Methodology metadata ──────────────────────────────────────────

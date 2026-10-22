@@ -1,27 +1,32 @@
 'use client';
 
-import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import React, { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react';
 import styles from './search.module.css';
 import { Search as SearchIcon, MapPin, Map, Navigation, Loader2 } from 'lucide-react';
 
-// Additional state for hint message when query is too short
-
-
-interface SearchResult {
+export interface SearchResult {
   id: string;
   name: string;
   type: string;
   secondaryLabel: string;
   longitude: number;
   latitude: number;
-  provider: string;
+  provider: 'geoapify' | 'nominatim';
+  inCoverage?: boolean;
 }
 
 interface SearchProps {
-  onLocationSelect: (location: { lat: number; lng: number; name: string; type: string }) => void;
+  onLocationSelect: (location: {
+    lat: number;
+    lng: number;
+    name: string;
+    type: string;
+    inCoverage?: boolean;
+  }) => void;
+  placeholder?: string;
 }
 
-export function Search({ onLocationSelect }: SearchProps) {
+export function Search({ onLocationSelect, placeholder = 'Search a locality, road, or landmark in Pune' }: SearchProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,28 +36,41 @@ export function Search({ onLocationSelect }: SearchProps) {
   const [hintMessage, setHintMessage] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Debounce query
+  const handleSearch = useCallback(async (searchQuery: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(searchQuery)}`);
+      if (!res.ok) {
+        if (res.status === 429) {
+          throw new Error('Search rate limit reached. Please wait a moment.');
+        }
+        throw new Error('Location search is temporarily unavailable.');
+      }
+      const data: SearchResult[] = await res.json();
+      setResults(data);
+      setIsOpen(true);
+      setSelectedIndex(-1);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Location search is temporarily unavailable.';
+      setError(msg);
+      setIsOpen(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Debounce query search when length >= 2
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length === 0) {
-      setHintMessage('');
-      setResults([]);
-      setIsOpen(false);
-      return;
-    }
-    if (trimmed.length === 1) {
-      setHintMessage('Type at least 2 characters.');
-      setResults([]);
-      setIsOpen(true);
-      return;
-    }
-    setHintMessage('');
+    if (trimmed.length < 2) return;
+
     const timer = setTimeout(() => {
       handleSearch(trimmed);
-    }, 500); // 500ms debounce
+    }, 400); // 400ms debounce
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, handleSearch]);
 
   // Click outside to close
   useEffect(() => {
@@ -61,52 +79,36 @@ export function Search({ onLocationSelect }: SearchProps) {
         setIsOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSearch = async (searchQuery: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/geocode?q=${encodeURIComponent(searchQuery)}`);
-      if (!res.ok) {
-        throw new Error('Search unavailable');
-      }
-      const data = await res.json();
-      setResults(data);
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    const trimmed = val.trim();
+    if (trimmed.length === 0) {
+      setHintMessage('');
+      setResults([]);
+      setIsOpen(false);
+    } else if (trimmed.length === 1) {
+      setHintMessage('Type at least 2 characters to search Pune/PCMC.');
+      setResults([]);
       setIsOpen(true);
-      setSelectedIndex(-1);
-    } catch (err) {
-      setError('Location search is temporarily unavailable.');
-      setIsOpen(true);
-    } finally {
-      setLoading(false);
+    } else {
+      setHintMessage('');
     }
   };
 
   const handleSelect = (result: SearchResult) => {
-    let formattedName = result.name || result.secondaryLabel.split(',')[0];
-
-    let resultType = result.type;
-    // Map internal types to user-friendly types
-    if (['residential', 'neighbourhood', 'suburb', 'village'].includes(result.type)) {
-      resultType = 'Locality';
-    } else if (['secondary', 'primary', 'tertiary', 'trunk', 'road', 'street'].includes(result.type)) {
-      resultType = 'Road';
-    } else if (['historic', 'attraction', 'museum', 'monument', 'ruins', 'tourism'].includes(result.type)) {
-      resultType = 'Landmark';
-    } else if (['city', 'town', 'county', 'state'].includes(result.type)) {
-      resultType = 'Area';
-    } else {
-      resultType = result.type.charAt(0).toUpperCase() + result.type.slice(1);
-    }
+    const formattedName = result.name || result.secondaryLabel.split(',')[0] || 'Selected Location';
 
     onLocationSelect({
       lat: result.latitude,
       lng: result.longitude,
       name: formattedName,
-      type: resultType
+      type: result.type,
+      inCoverage: result.inCoverage !== false,
     });
     setQuery(formattedName);
     setIsOpen(false);
@@ -132,10 +134,16 @@ export function Search({ onLocationSelect }: SearchProps) {
   };
 
   const getTypeIcon = (type: string) => {
-    if (['residential', 'neighbourhood', 'suburb', 'village', 'Locality'].includes(type)) return <Map size={16} className={styles.resultIcon} />;
-    if (['secondary', 'primary', 'tertiary', 'trunk', 'road', 'Road'].includes(type)) return <Navigation size={16} className={styles.resultIcon} />;
+    if (['Locality', 'residential', 'neighbourhood', 'suburb', 'village'].includes(type)) {
+      return <Map size={16} className={styles.resultIcon} />;
+    }
+    if (['Road', 'secondary', 'primary', 'tertiary', 'trunk', 'road'].includes(type)) {
+      return <Navigation size={16} className={styles.resultIcon} />;
+    }
     return <MapPin size={16} className={styles.resultIcon} />;
   };
+
+  const activeProvider = results.length > 0 ? results[0].provider : 'nominatim';
 
   return (
     <div className={styles.searchContainer} ref={dropdownRef}>
@@ -144,11 +152,11 @@ export function Search({ onLocationSelect }: SearchProps) {
         <input
           type="text"
           className={styles.searchInput}
-          placeholder="Search a locality, road, or landmark"
+          placeholder={placeholder}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onFocus={() => { if (query.length >= 2) setIsOpen(true); }}
+          onFocus={() => { if (query.trim().length >= 2) setIsOpen(true); }}
           aria-expanded={isOpen}
           role="combobox"
           aria-controls="search-dropdown"
@@ -160,39 +168,27 @@ export function Search({ onLocationSelect }: SearchProps) {
         <div className={styles.hintState}>{hintMessage}</div>
       )}
 
-      {isOpen && (query.length >= 2) && (
+      {isOpen && (query.trim().length >= 2) && (
         <div className={styles.dropdown} id="search-dropdown" role="listbox">
           {error ? (
             <div className={styles.errorState}>
-              {error}
+              <div>{error}</div>
               <button
                 className={styles.retryButton}
-                onClick={() => handleSearch(query)}
+                onClick={() => handleSearch(query.trim())}
                 type="button"
-              >Retry</button>
+              >
+                Retry Search
+              </button>
             </div>
           ) : results.length === 0 && !loading ? (
-            <div className={styles.emptyState}>No locations found</div>
+            <div className={styles.emptyState}>
+              No locations found in Pune/PCMC study area
+            </div>
           ) : (
             <>
               <ul className={styles.resultList}>
                 {results.map((result, index) => {
-                  let resultType = result.type;
-                  if (['residential', 'neighbourhood', 'suburb', 'village'].includes(result.type)) {
-                    resultType = 'Locality';
-                  } else if (['secondary', 'primary', 'tertiary', 'trunk', 'road', 'street'].includes(result.type)) {
-                    resultType = 'Road';
-                  } else if (['historic', 'attraction', 'museum', 'monument', 'ruins', 'tourism'].includes(result.type)) {
-                    resultType = 'Landmark';
-                  } else if (['city', 'town', 'county', 'state'].includes(result.type)) {
-                    resultType = 'Area';
-                  } else {
-                    resultType = result.type.charAt(0).toUpperCase() + result.type.slice(1);
-                  }
-
-                  // Add 'Pune' context if available
-                  const contextName = result.secondaryLabel.includes('Pune') ? 'Pune' : 'India';
-
                   return (
                     <li
                       key={result.id}
@@ -201,20 +197,65 @@ export function Search({ onLocationSelect }: SearchProps) {
                       role="option"
                       aria-selected={index === selectedIndex}
                     >
-                      {getTypeIcon(resultType)}
-                      <div className={styles.resultContent}>
-                        <span className={styles.resultName}>{result.name || result.secondaryLabel.split(',')[0]}</span>
-                        <span className={styles.resultType}>{resultType} · {contextName}</span>
+                      {getTypeIcon(result.type)}
+                      <div className={styles.resultContent} style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                          <span className={styles.resultName}>{result.name}</span>
+                          {result.inCoverage === false ? (
+                            <span style={{
+                              fontSize: '9px',
+                              fontFamily: 'var(--font-jetbrains-mono)',
+                              color: 'var(--risk-high)',
+                              backgroundColor: 'var(--surface-container-high)',
+                              padding: '1px 4px',
+                              border: '1px solid var(--outline-variant)',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              OUTSIDE EXTENT
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '9px',
+                              fontFamily: 'var(--font-jetbrains-mono)',
+                              color: 'var(--primary)',
+                              backgroundColor: 'var(--green-pale)',
+                              padding: '1px 4px',
+                              border: '1px solid var(--outline-variant)',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              PMC/PCMC
+                            </span>
+                          )}
+                        </div>
+                        <span className={styles.resultType} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {result.type} · {result.secondaryLabel}
+                        </span>
                       </div>
                     </li>
                   );
                 })}
               </ul>
-              {results.length > 0 && (
-                <div style={{ padding: '8px 12px', fontSize: '0.7rem', color: '#65706B', textAlign: 'right', borderTop: '1px solid #F7F6F1' }}>
-                  Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#294577', textDecoration: 'none' }}>Geoapify</a>
-                </div>
-              )}
+
+              {/* Authoritative Attribution adhering to usage policies */}
+              <div style={{
+                padding: '6px 12px',
+                fontSize: '10px',
+                fontFamily: 'var(--font-jetbrains-mono)',
+                color: 'var(--on-surface-variant)',
+                textAlign: 'right',
+                borderTop: '1px solid var(--outline-variant)',
+                backgroundColor: 'var(--surface-container-low)'
+              }}>
+                {activeProvider === 'nominatim' ? (
+                  <span>
+                    Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline' }}>OpenStreetMap contributors, ODbL</a>
+                  </span>
+                ) : (
+                  <span>
+                    Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>Geoapify</a>
+                  </span>
+                )}
+              </div>
             </>
           )}
         </div>

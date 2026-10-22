@@ -151,6 +151,11 @@ async def get_summary(
         carbon_row[0], carbon_row[1], carbon_row[2], carbon_row[3], carbon_row[4]
     )
 
+    canopy_ha = (float(canopy_area) / 10000.0) if canopy_area is not None else None
+    gross_grid_ha = float(total_blocks * 6.25) if total_blocks else 33181.25
+    canopy_density = (float(total_carbon) / canopy_ha) if (total_carbon is not None and canopy_ha and canopy_ha > 0) else None
+    gross_grid_density = (float(total_carbon) / gross_grid_ha) if (total_carbon is not None and gross_grid_ha > 0) else None
+
     return {
         "uehi": {
             "total_blocks": total_blocks,
@@ -160,9 +165,12 @@ async def get_summary(
         "carbon": {
             "total_carbon": float(total_carbon) if total_carbon is not None else None,
             "canopy_area_km2": float(canopy_area) / 1000000.0 if canopy_area is not None else None,
+            "canopy_area_ha": canopy_ha,
             "tree_count": float(tree_count) if tree_count is not None else None,
             "biomass_kg": float(biomass) if biomass is not None else None,
-            "nonzero_blocks": carbon_blocks_count
+            "nonzero_blocks": carbon_blocks_count,
+            "canopy_density_t_co2e_per_ha": round(canopy_density, 2) if canopy_density is not None else None,
+            "gross_grid_density_t_co2e_per_ha": round(gross_grid_density, 2) if gross_grid_density is not None else None,
         }
     }
 
@@ -187,9 +195,75 @@ async def list_blocks(
     ]
 
 
+def _get_block_from_uehi_blocks(block_id: str, db: Session) -> dict | None:
+    """Query production uehi_blocks joined with carbon_blocks directly from PostgreSQL."""
+    try:
+        query = text(
+            """
+            SELECT 
+                b.block_id,
+                b.uehi_score,
+                b.risk_level,
+                b.ndvi,
+                b.tree_density,
+                b.impervious_surfaces,
+                b.temperature,
+                b.population_exposure,
+                b.pm25,
+                c.standing_carbon_stock,
+                c.canopy_area_m2,
+                c.estimated_tree_count,
+                c.above_ground_biomass_kg,
+                ST_AsGeoJSON(ST_Transform(b.geom, 4326)) AS geojson
+            FROM uehi_blocks b
+            LEFT JOIN carbon_blocks c ON b.block_id = c.block_id
+            WHERE b.block_id = :block_id
+            """
+        )
+        row = db.execute(query, {"block_id": block_id}).mappings().first()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
 @app.get("/blocks/{block_id}", response_model=BlockResponse, tags=["blocks"])
 async def get_block(block_id: str, db: Session = Depends(get_db)):
     """Get full data for a single city block."""
+    prod_block = _get_block_from_uehi_blocks(block_id, db)
+    if prod_block is not None:
+        geo = json.loads(prod_block["geojson"]) if prod_block.get("geojson") else None
+        has_carbon = (
+            prod_block.get("canopy_area_m2") is not None
+            or prod_block.get("estimated_tree_count") is not None
+            or prod_block.get("above_ground_biomass_kg") is not None
+        )
+        carbon_details = {
+            "canopy_area_m2": float(prod_block["canopy_area_m2"]) if prod_block.get("canopy_area_m2") is not None else None,
+            "estimated_tree_count": float(prod_block["estimated_tree_count"]) if prod_block.get("estimated_tree_count") is not None else None,
+            "above_ground_biomass_kg": float(prod_block["above_ground_biomass_kg"]) if prod_block.get("above_ground_biomass_kg") is not None else None,
+        } if has_carbon else None
+
+        return BlockResponse(
+            block_id=prod_block["block_id"],
+            uehi_score=float(prod_block["uehi_score"]) if prod_block["uehi_score"] is not None else None,
+            risk_level=str(prod_block["risk_level"]) if prod_block["risk_level"] is not None else None,
+            factors=UEHIFactors(
+                ndvi=float(prod_block["ndvi"]) if prod_block["ndvi"] is not None else None,
+                tree_density=float(prod_block["tree_density"]) if prod_block["tree_density"] is not None else None,
+                biodiversity=None,
+                aqi=float(prod_block["pm25"]) if prod_block["pm25"] is not None else None,
+                temperature=float(prod_block["temperature"]) if prod_block["temperature"] is not None else None,
+                impervious_surfaces=float(prod_block["impervious_surfaces"]) if prod_block["impervious_surfaces"] is not None else None,
+                water_availability=None,
+                population_exposure=float(prod_block["population_exposure"]) if prod_block["population_exposure"] is not None else None,
+            ),
+            canopy_volume=None,
+            agb_kg=float(prod_block["above_ground_biomass_kg"]) if prod_block.get("above_ground_biomass_kg") is not None else None,
+            co2_tonnes=float(prod_block["standing_carbon_stock"]) if prod_block.get("standing_carbon_stock") is not None else None,
+            carbon_details=carbon_details,
+            geojson=geo,
+        )
+
     block = _get_block_or_404(block_id, db)
     return BlockResponse(
         block_id=block.block_id,
@@ -210,6 +284,24 @@ async def get_block(block_id: str, db: Session = Depends(get_db)):
 )
 async def get_block_score(block_id: str, db: Session = Depends(get_db)):
     """Get the UEHI score and risk level for a city block."""
+    prod_block = _get_block_from_uehi_blocks(block_id, db)
+    if prod_block is not None:
+        return ScoreResponse(
+            block_id=prod_block["block_id"],
+            uehi_score=float(prod_block["uehi_score"]) if prod_block["uehi_score"] is not None else None,
+            risk_level=str(prod_block["risk_level"]) if prod_block["risk_level"] is not None else None,
+            factors=UEHIFactors(
+                ndvi=float(prod_block["ndvi"]) if prod_block["ndvi"] is not None else None,
+                tree_density=float(prod_block["tree_density"]) if prod_block["tree_density"] is not None else None,
+                biodiversity=None,
+                aqi=float(prod_block["pm25"]) if prod_block["pm25"] is not None else None,
+                temperature=float(prod_block["temperature"]) if prod_block["temperature"] is not None else None,
+                impervious_surfaces=float(prod_block["impervious_surfaces"]) if prod_block["impervious_surfaces"] is not None else None,
+                water_availability=None,
+                population_exposure=float(prod_block["population_exposure"]) if prod_block["population_exposure"] is not None else None,
+            ),
+        )
+
     block = _get_block_or_404(block_id, db)
     return ScoreResponse(
         block_id=block.block_id,
@@ -226,6 +318,15 @@ async def get_block_score(block_id: str, db: Session = Depends(get_db)):
 )
 async def get_block_carbon(block_id: str, db: Session = Depends(get_db)):
     """Get carbon / biomass data for a city block."""
+    prod_block = _get_block_from_uehi_blocks(block_id, db)
+    if prod_block is not None:
+        return CarbonResponse(
+            block_id=prod_block["block_id"],
+            canopy_volume=None,
+            agb_kg=float(prod_block["above_ground_biomass_kg"]) if prod_block.get("above_ground_biomass_kg") is not None else None,
+            co2_tonnes=float(prod_block["standing_carbon_stock"]) if prod_block.get("standing_carbon_stock") is not None else None,
+        )
+
     block = _get_block_or_404(block_id, db)
     return CarbonResponse(
         block_id=block.block_id,

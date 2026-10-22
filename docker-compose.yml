@@ -1,6 +1,6 @@
 # ──────────────────────────────────────────────────────────────
 # UEHIS — Production Docker Compose Configuration
-# Target: AWS Elastic Beanstalk Docker Platform (Single EC2)
+# Target: AWS EC2 (Single Instance with Elastic IP & Docker Compose)
 # Architecture: Nginx Reverse Proxy + Next.js 16 + FastAPI
 # Data Tier: Retains Supabase-Managed PostgreSQL/PostGIS & Auth
 # ──────────────────────────────────────────────────────────────

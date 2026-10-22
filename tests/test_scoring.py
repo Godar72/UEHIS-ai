@@ -272,6 +272,27 @@ class TestRiskClassification:
             "Critical", "High", "Moderate", "Low", "Low"
         ]
 
+    def test_boundary_precision(self):
+        # Scores immediately below, exactly at, and immediately above 25, 50, and 75
+        scores = [24.99, 25.0, 25.01, 49.99, 50.0, 50.01, 74.99, 75.0, 75.01]
+        data = {
+            "uehi_score": scores,
+            "geometry": [box(i, 0, i + 1, 1) for i in range(len(scores))],
+        }
+        gdf = gpd.GeoDataFrame(data, crs="EPSG:4326")
+        result = classify_risk(gdf)
+        assert list(result["risk_level"]) == [
+            "Critical",  # 24.99 (< 25)
+            "High",      # 25.0 (>= 25 and < 50)
+            "High",      # 25.01 (>= 25 and < 50)
+            "High",      # 49.99 (>= 25 and < 50)
+            "Moderate",  # 50.0 (>= 50 and < 75)
+            "Moderate",  # 50.01 (>= 50 and < 75)
+            "Moderate",  # 74.99 (>= 50 and < 75)
+            "Low",       # 75.0 (>= 75)
+            "Low",       # 75.01 (>= 75)
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Entropy weight tests — Safeguard A, B, and diagnostics

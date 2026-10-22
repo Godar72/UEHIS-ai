@@ -180,3 +180,70 @@ def test_startup_validation_in_development(monkeypatch):
 
     # Should not raise in development
     validate_startup_security()
+
+
+def test_block_detail_endpoint_not_found(monkeypatch):
+    """Verify 404 Not Found for non-existent block IDs."""
+    from unittest.mock import MagicMock
+    from api.main import get_db
+
+    # Override get_db to return an empty query result
+    mock_db = MagicMock()
+    mock_db.execute.return_value.mappings.return_value.first.return_value = None
+    mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    try:
+        response = client.get("/blocks/PN_000000_0000000")
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_block_detail_endpoint_success_schema(monkeypatch):
+    """Verify GET /blocks/{block_id} returns compliant BlockResponse attributes."""
+    from unittest.mock import MagicMock
+    from api.main import get_db
+
+    mock_row = {
+        "block_id": "PN_379500_2050750",
+        "uehi_score": 58.42,
+        "risk_level": "Moderate",
+        "ndvi": 0.284,
+        "tree_density": 0.142,
+        "impervious_surfaces": 0.45,
+        "temperature": 34.2,
+        "population_exposure": 12.4,
+        "pm25": 48.6,
+        "standing_carbon_stock": 142.5,
+        "canopy_area_m2": 8900.0,
+        "estimated_tree_count": 180.0,
+        "above_ground_biomass_kg": 285000.0,
+        "geojson": '{"type": "Polygon", "coordinates": [[[73.85, 18.52], [73.86, 18.52], [73.86, 18.53], [73.85, 18.53], [73.85, 18.52]]]}',
+    }
+
+    mock_db = MagicMock()
+    mock_db.execute.return_value.mappings.return_value.first.return_value = mock_row
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    try:
+        response = client.get("/blocks/PN_379500_2050750")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["block_id"] == "PN_379500_2050750"
+        assert data["uehi_score"] == 58.42
+        assert data["risk_level"] == "Moderate"
+        assert data["factors"]["ndvi"] == 0.284
+        assert data["factors"]["tree_density"] == 0.142
+        assert data["factors"]["impervious_surfaces"] == 0.45
+        assert data["factors"]["temperature"] == 34.2
+        assert data["factors"]["population_exposure"] == 12.4
+        assert data["factors"]["aqi"] == 48.6
+        assert data["co2_tonnes"] == 142.5
+        assert data["carbon_details"]["canopy_area_m2"] == 8900.0
+        assert data["carbon_details"]["estimated_tree_count"] == 180.0
+        assert data["carbon_details"]["above_ground_biomass_kg"] == 285000.0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+

@@ -1,34 +1,55 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import circle from '@turf/circle';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
 import { MapView } from '@/components/Map';
-import { RightPanel } from '@/components/RightPanel/RightPanel';
-import { StudyAreaResult } from '@/components/StudyAreaResult/StudyAreaResult';
-import { uehisClient } from '@/lib/api/client';
+import { RightPanel, BlockResponse } from '@/components/RightPanel/RightPanel';
+
+interface ExploreBlockResponse extends BlockResponse {
+  ward_name?: string;
+}
+import { StudyAreaResult, CandidateBlock, StudyAreaData } from '@/components/StudyAreaResult/StudyAreaResult';
+import { uehisClient, APIError } from '@/lib/api/client';
 import { recordActivity } from '@/lib/api/activity';
 import styles from '../page.module.css';
+
+export interface StudyAreaAnalysisResult {
+  uehi?: {
+    score?: number;
+    risk_level?: string;
+    total_blocks?: number;
+    distribution?: Record<string, number>;
+  } | null;
+  provenance?: Record<string, unknown>;
+  carbon?: {
+    total_carbon?: number;
+    canopy_density?: number;
+    gross_grid_density?: number;
+    error?: string;
+  } | null;
+  candidate_blocks?: CandidateBlock[];
+  total_blocks?: number;
+}
 
 function ExploreContent() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const slug = params.slug as string[] | undefined;
   
   // Block state
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [blockLoading, setBlockLoading] = useState(false);
-  const [blockData, setBlockData] = useState<any | null>(null);
+  const [blockData, setBlockData] = useState<ExploreBlockResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Study Area state
   const [studyAreaActive, setStudyAreaActive] = useState(false);
   const [studyAreaLoading, setStudyAreaLoading] = useState(false);
-  const [studyAreaData, setStudyAreaData] = useState<any | null>(null);
+  const [studyAreaData, setStudyAreaData] = useState<StudyAreaData | null>(null);
   const [studyAreaError, setStudyAreaError] = useState<string | null>(null);
-  const [studyAreaGeometry, setStudyAreaGeometry] = useState<any | null>(null);
+  const [studyAreaGeometry, setStudyAreaGeometry] = useState<GeoJSON.Geometry | GeoJSON.Feature | null>(null);
   const [studyAreaLocationName, setStudyAreaLocationName] = useState('Custom Area');
   const [studyAreaBoundaryType, setStudyAreaBoundaryType] = useState('User polygon');
   const [currentRadius, setCurrentRadius] = useState<number>(2000);
@@ -36,9 +57,10 @@ function ExploreContent() {
   // Search and mobile interaction state
   const [searchResult, setSearchResult] = useState<{ lat: number; lng: number; name: string; type: string } | null>(null);
   const [isMobileToolsOpen, setIsMobileToolsOpen] = useState(false);
-  const [layers, setLayers] = useState({ uehi: true });
+  const [layers, setLayers] = useState({ uehi: false });
 
   const fetchController = useRef<AbortController | null>(null);
+  const activeBlockRef = useRef<string | null>(null);
   const analyzedUrlRef = useRef<string | null>(null);
 
   // Listen to mobile bottom nav "Study Area" tab action
@@ -51,8 +73,73 @@ function ExploreContent() {
   }, []);
 
   // Primary Spatial Analysis Execution
+  // Primary Block Inspection Execution (hoisted before slug effect)
+  const handleBlockClick = useCallback(async (blockId: string) => {
+    activeBlockRef.current = blockId;
+    setSelectedBlockId(blockId);
+    setBlockLoading(true);
+    setBlockData(null);
+    setError(null);
+    setStudyAreaActive(false);
+    setIsMobileToolsOpen(false);
+
+    if (typeof window !== 'undefined' && window.location.pathname !== `/explore/block/${blockId}`) {
+      window.history.pushState(null, '', `/explore/block/${blockId}`);
+    }
+
+    if (fetchController.current) {
+      fetchController.current.abort();
+    }
+    fetchController.current = new AbortController();
+
+    try {
+      const data = await uehisClient.blocks.getDetail(blockId, { signal: fetchController.current.signal }) as ExploreBlockResponse;
+      // Stale request guard: if another block was clicked while this request was in flight, do not overwrite!
+      if (activeBlockRef.current !== blockId) return;
+
+      setBlockData(data);
+      recordActivity({
+        activity_type: 'viewed_block',
+        category: 'explore',
+        action_type: 'viewed',
+        title: `Examined Ecological Block ${blockId}`,
+        description: `UEHI Score: ${data.uehi_score !== null && data.uehi_score !== undefined ? data.uehi_score : 'N/A'} · Risk: ${data.risk_level || 'N/A'}${data.ward_name ? ` · Ward: ${data.ward_name}` : ''}`,
+        entity_type: 'block',
+        entity_id: blockId,
+        metadata: {
+          block_id: blockId,
+          uehi_score: data.uehi_score,
+          risk_level: data.risk_level,
+          ward_name: data.ward_name,
+          reopen_url: `/explore/block/${blockId}`,
+        },
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      if (activeBlockRef.current !== blockId) return; // Stale error guard
+
+      console.error('Block load error:', err);
+      setBlockData(null);
+      const apiErr = err as Partial<APIError>;
+      if (apiErr?.isNotFound || apiErr?.status === 404) {
+        setError(`Block "${blockId}" not found in Pune study area.`);
+      } else if (apiErr?.isTimeout || apiErr?.status === 504) {
+        setError('Request timed out while loading block analysis.');
+      } else if (apiErr?.isNetworkError) {
+        setError('Network error. Check connection and retry.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Block analysis is temporarily unavailable.');
+      }
+    } finally {
+      if (activeBlockRef.current === blockId) {
+        setBlockLoading(false);
+      }
+    }
+  }, []);
+
+  // Primary Spatial Analysis Execution
   const handleAnalyzeStudyArea = useCallback(async (
-    geometry: any,
+    geometry: GeoJSON.Geometry | GeoJSON.Feature,
     locationName: string,
     boundaryType: string,
     radiusMeters: number = 2000
@@ -69,7 +156,7 @@ function ExploreContent() {
 
     try {
       // Step 1: Calculate UEHI Composite
-      const uehiResponse = await uehisClient.studyArea.analyzeUehi(geometry) as any;
+      const uehiResponse = await uehisClient.studyArea.analyzeUehi(geometry) as StudyAreaAnalysisResult;
       setStudyAreaData({ uehi: uehiResponse.uehi, provenance: uehiResponse.provenance, carbon: null });
 
       // Record verified research operation
@@ -91,24 +178,26 @@ function ExploreContent() {
       });
 
       // Step 2: Background Carbon Estimation
-      uehisClient.studyArea.analyzeCarbon(geometry).then((carbonResponse: any) => {
-        setStudyAreaData((prev: any) => ({
-          ...prev,
-          carbon: carbonResponse.carbon,
-          provenance: { ...(prev?.provenance || {}), ...(carbonResponse.provenance || {}) }
+      uehisClient.studyArea.analyzeCarbon(geometry).then((carbonResponse: unknown) => {
+        const cResp = carbonResponse as { carbon?: StudyAreaAnalysisResult['carbon']; provenance?: Record<string, unknown> };
+        setStudyAreaData((prev) => ({
+          ...(prev || {}),
+          carbon: cResp?.carbon || null,
+          provenance: { ...(prev?.provenance || {}), ...(cResp?.provenance || {}) }
         }));
       }).catch(() => {
-        setStudyAreaData((prev: any) => ({
-          ...prev,
+        setStudyAreaData((prev) => ({
+          ...(prev || {}),
           carbon: { error: 'Failed to estimate carbon.' }
         }));
       }).finally(() => {
         setStudyAreaLoading(false);
       });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Study area analysis error:', err);
-      setStudyAreaError(err.message || 'Analysis failed. Please try again.');
+      const msg = err instanceof Error ? err.message : 'Analysis failed. Please try again.';
+      setStudyAreaError(msg);
       setStudyAreaLoading(false);
     }
   }, []);
@@ -125,7 +214,6 @@ function ExploreContent() {
     if (analyzedUrlRef.current === cacheKey) return;
 
     const radius = radiusParam ? parseInt(radiusParam, 10) : 2000;
-    setCurrentRadius(radius);
 
     if (latParam && lngParam) {
       const lat = parseFloat(latParam);
@@ -133,23 +221,29 @@ function ExploreContent() {
       const name = nameParam || 'Custom Study Area';
       analyzedUrlRef.current = cacheKey;
 
-      setSearchResult({ lat, lng, name, type: 'point_radius' });
-      const circleGeom = circle([lng, lat], radius / 1000, { units: 'kilometers' }).geometry;
-      handleAnalyzeStudyArea(circleGeom, name, 'point_radius', radius);
+      queueMicrotask(() => {
+        setCurrentRadius(radius);
+        setSearchResult({ lat, lng, name, type: 'point_radius' });
+        const circleGeom = circle([lng, lat], radius / 1000, { units: 'kilometers' }).geometry;
+        handleAnalyzeStudyArea(circleGeom, name, 'point_radius', radius);
+      });
     } else if (nameParam) {
       // Name provided without coordinates (e.g. from homepage search redirect)
       analyzedUrlRef.current = cacheKey;
-      setStudyAreaLoading(true);
-      setStudyAreaActive(true);
-      setStudyAreaLocationName(nameParam);
+      queueMicrotask(() => {
+        setCurrentRadius(radius);
+        setStudyAreaLoading(true);
+        setStudyAreaActive(true);
+        setStudyAreaLocationName(nameParam);
+      });
 
       fetch(`/api/geocode?q=${encodeURIComponent(nameParam)}`)
         .then((res) => res.json())
-        .then((data) => {
+        .then((data: unknown) => {
           if (Array.isArray(data) && data.length > 0) {
-            const first = data[0];
+            const first = data[0] as { lat: string; lon?: string; lng?: string; display_name?: string };
             const lat = parseFloat(first.lat);
-            const lng = parseFloat(first.lon || first.lng);
+            const lng = parseFloat(first.lon || first.lng || '0');
             const locName = first.display_name?.split(',')[0] || nameParam;
             
             setSearchResult({ lat, lng, name: locName, type: 'point_radius' });
@@ -169,7 +263,7 @@ function ExploreContent() {
             setStudyAreaLoading(false);
           }
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           console.error('Geocoding error:', err);
           setStudyAreaError('Geocoding service unavailable.');
           setStudyAreaLoading(false);
@@ -182,74 +276,51 @@ function ExploreContent() {
     if (slug && slug.length >= 2 && slug[0] === 'block') {
       const urlBlockId = slug[1];
       if (urlBlockId !== selectedBlockId) {
-        handleBlockClick(urlBlockId);
+        queueMicrotask(() => {
+          handleBlockClick(urlBlockId);
+        });
       }
     } else if (!slug || slug[0] !== 'block') {
-      setSelectedBlockId(null);
-      setBlockData(null);
-      setError(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
-
-  const handleBlockClick = useCallback(async (blockId: string) => {
-    setSelectedBlockId(blockId);
-    setBlockLoading(true);
-    setBlockData(null);
-    setError(null);
-    setStudyAreaActive(false);
-    setIsMobileToolsOpen(false);
-
-    window.history.pushState(null, '', `/explore/block/${blockId}`);
-
-    if (fetchController.current) {
-      fetchController.current.abort();
-    }
-    fetchController.current = new AbortController();
-
-    try {
-      const data = await uehisClient.blocks.getDetail(blockId, { signal: fetchController.current.signal });
-      setBlockData(data);
-      recordActivity({
-        activity_type: 'viewed_block',
-        category: 'explore',
-        action_type: 'viewed',
-        title: `Examined Ecological Block ${blockId}`,
-        description: `UEHI Score: ${data.uehi_score !== null && data.uehi_score !== undefined ? data.uehi_score : 'N/A'} · Risk: ${data.risk_level || 'N/A'}${data.ward_name ? ` · Ward: ${data.ward_name}` : ''}`,
-        entity_type: 'block',
-        entity_id: blockId,
-        metadata: {
-          block_id: blockId,
-          uehi_score: data.uehi_score,
-          risk_level: data.risk_level,
-          ward_name: data.ward_name,
-          reopen_url: `/explore/block/${blockId}`,
-        },
-      });
-    } catch (err: any) {
-      if (err.name === 'AbortError') return;
-      console.error('Block load error:', err);
-      setBlockData(null);
-      if (err.isNotFound || err.status === 404) {
-        setError(`Block "${blockId}" not found in Pune study area.`);
-      } else if (err.isTimeout || err.status === 504) {
-        setError('Request timed out while loading block analysis.');
-      } else if (err.isNetworkError) {
-        setError('Network error. Check connection and retry.');
-      } else {
-        setError(err.message || 'Block analysis is temporarily unavailable.');
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/explore/block')) {
+        if (selectedBlockId !== null) {
+          queueMicrotask(() => {
+            activeBlockRef.current = null;
+            setSelectedBlockId(null);
+            setBlockData(null);
+            setError(null);
+          });
+        }
       }
-    } finally {
-      setBlockLoading(false);
     }
-  }, []);
+  }, [slug, selectedBlockId, handleBlockClick]);
+
+  // Synchronize browser history popstate (Back/Forward navigation)
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const match = path.match(/\/explore\/block\/([A-Za-z0-9_-]+)/);
+      if (match && match[1]) {
+        handleBlockClick(match[1]);
+      } else if (path === '/explore' || path === '/explore/') {
+        activeBlockRef.current = null;
+        setSelectedBlockId(null);
+        setBlockData(null);
+        setError(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [handleBlockClick]);
 
   const handleClosePanel = useCallback(() => {
+    activeBlockRef.current = null;
     setSelectedBlockId(null);
     setBlockData(null);
     setError(null);
     setStudyAreaActive(false);
-    window.history.pushState(null, '', '/explore');
+    if (typeof window !== 'undefined' && window.location.pathname !== '/explore') {
+      window.history.pushState(null, '', '/explore');
+    }
   }, []);
 
   const handleLocationSelect = useCallback((location: { lat: number; lng: number; name: string; type: string }) => {
@@ -329,11 +400,14 @@ function ExploreContent() {
             <span>Layers &amp; Search</span>
           </button>
 
-          {!studyAreaActive && studyAreaData && !selectedBlockId && (
+          {!studyAreaActive && studyAreaData && (
             <button
               type="button"
               className={styles.reopenResultsBtn}
-              onClick={() => setStudyAreaActive(true)}
+              onClick={() => {
+                setSelectedBlockId(null);
+                setStudyAreaActive(true);
+              }}
               aria-label="Reopen study area analysis report"
             >
               <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>assessment</span>
@@ -406,6 +480,7 @@ function ExploreContent() {
           currentRadius={currentRadius}
           onRadiusChange={handleRadiusChange}
           onRetry={handleRetryAnalysis}
+          onSelectBlock={handleBlockClick}
         />
       )}
     </div>

@@ -404,15 +404,14 @@ class TestPuneProductionArchitecture:
             "Geometry": type("MockGeometry", (), {"Polygon": lambda *a, **k: None}),
             "Reducer": type("MockReducer", (), {"mean": lambda: None})
         })
-        sys.modules['ee'] = mock_ee
+        monkeypatch.setitem(sys.modules, 'ee', mock_ee)
         
         import carbon_sink.canopy_height
         
         # also mock authenticate_gee
         monkeypatch.setattr(carbon_sink.canopy_height, "authenticate_gee", lambda: None, raising=False)
         # Because authenticate_gee is in data_ingestion.sentinel
-        import sys
-        sys.modules['data_ingestion.sentinel'] = type("MockDI", (), {"authenticate_gee": lambda: None})
+        monkeypatch.setitem(sys.modules, 'data_ingestion.sentinel', type("MockDI", (), {"authenticate_gee": lambda: None}))
         
         from shapely.geometry import box
         import pandas as pd

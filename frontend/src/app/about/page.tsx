@@ -2,7 +2,6 @@
 
 import React from 'react';
 import styles from './about.module.css';
-import Link from 'next/link';
 
 export default function AboutPage() {
   const chapters = [
@@ -34,7 +33,7 @@ export default function AboutPage() {
             </div>
           </div>
           <p className={styles.chapterText}>
-            The central operational index is the <strong>Urban Ecosystem Health Index (UEHI)</strong>—a normalized composite index scored on a scale from <code>0 to 100</code> (where lower indicates healthier conditions), projected in <strong>EPSG:32643 UTM Zone 43N</strong>.
+            The central operational index is the <strong>Urban Ecosystem Health Index (UEHI)</strong>—a normalized composite index scored on a scale from <code>0 to 100</code> (where higher indicates healthier conditions), projected in <strong>EPSG:32643 UTM Zone 43N</strong>.
           </p>
         </>
       )
@@ -83,7 +82,7 @@ export default function AboutPage() {
             <p className={styles.chapterText}>
               • <strong>Basemap Switcher:</strong> Toggle between high-contrast Carto Light vector basemap and true-color Sentinel-2 satellite imagery.<br />
               • <strong>Layer Stack:</strong> Enable or disable UEHI score choropleths, carbon density overlays, and candidate planting units.<br />
-              • <strong>Four-Tier Risk Legend:</strong> Low (&lt;45), Moderate (45-60), High (60-75), Severe (&gt;75).
+              • <strong>Four-Tier Risk Legend:</strong> Critical Risk (&lt;25), High Vulnerability (25 to &lt;50), Moderate Stress (50 to &lt;75), Low Risk / Stable (&ge;75).
             </p>
           </div>
         </>
