@@ -33,13 +33,50 @@ export function isUtm43n(x: number, y: number): boolean {
   );
 }
 
+/**
+ * Strictly validates that an explicitly declared Coordinate Reference System (CRS)
+ * identifier is a documented, authoritative representation of EPSG:32643 (UTM Zone 43N).
+ *
+ * Supported formats (case-insensitive, trimmed):
+ * - Short code: "EPSG:32643", "EPSG::32643", "32643", or numeric 32643
+ * - OGC URN: "urn:ogc:def:crs:EPSG::32643", "urn:ogc:def:crs:EPSG:32643", "urn:ogc:def:crs:EPSG:<version>:32643"
+ * - OGC URI: "http(s)://www.opengis.net/def/crs/EPSG/0/32643", "http(s)://www.opengis.net/gml/srs/epsg.xml#32643"
+ *
+ * Rejects:
+ * - Substring traps (e.g., "EPSG:132643", "MYCRS_32643", "CUSTOM_32643_PROJECTED")
+ * - Incompatible CRSs (e.g., "EPSG:4326", "EPSG:3857", "EPSG:32644", "CRS84")
+ * - Malformed, empty, or non-matching inputs
+ */
+export function isValidUtm43nCrs(crsIdentifier: unknown): boolean {
+  if (crsIdentifier === 32643) return true;
+  if (typeof crsIdentifier !== 'string') return false;
+
+  const trimmed = crsIdentifier.trim();
+  if (!trimmed) return false;
+
+  const utm43nPattern =
+    /^(?:(?:urn:ogc:def:crs:EPSG:(?:[0-9.]*:)?|EPSG:{1,2}|https?:\/\/www\.opengis\.net\/(?:def\/crs\/EPSG\/0\/|gml\/srs\/epsg\.xml#))?32643)$/i;
+
+  return utm43nPattern.test(trimmed);
+}
+
 export function parseCoordinates(geom: unknown): [number, number] | null {
   if (!geom) return null;
   // 1. GeoJSON object format: { type: 'Point', coordinates: [x, y] }
   if (typeof geom === 'object' && geom !== null && 'coordinates' in geom) {
-    const obj = geom as { type?: string; coordinates?: unknown; crs?: { properties?: { name?: string } } };
-    if (obj.crs?.properties?.name && !obj.crs.properties.name.includes('32643')) {
-      return null;
+    const obj = geom as {
+      type?: string;
+      coordinates?: unknown;
+      crs?: { properties?: { name?: unknown; code?: unknown } } | string | null;
+    };
+    if (obj.crs != null) {
+      const crsId =
+        typeof obj.crs === 'string'
+          ? obj.crs
+          : (obj.crs.properties?.name ?? obj.crs.properties?.code);
+      if (!isValidUtm43nCrs(crsId)) {
+        return null;
+      }
     }
     const coords = obj.coordinates;
     if (Array.isArray(coords) && coords.length >= 2) {
@@ -54,8 +91,14 @@ export function parseCoordinates(geom: unknown): [number, number] | null {
     if (str.startsWith('{')) {
       try {
         const parsed = JSON.parse(str);
-        if (parsed.crs?.properties?.name && !parsed.crs.properties.name.includes('32643')) {
-          return null;
+        if (parsed.crs != null) {
+          const crsId =
+            typeof parsed.crs === 'string'
+              ? parsed.crs
+              : (parsed.crs.properties?.name ?? parsed.crs.properties?.code);
+          if (!isValidUtm43nCrs(crsId)) {
+            return null;
+          }
         }
         if (parsed.coordinates && Array.isArray(parsed.coordinates) && parsed.coordinates.length >= 2) {
           const x = Number(parsed.coordinates[0]);
@@ -67,8 +110,8 @@ export function parseCoordinates(geom: unknown): [number, number] | null {
       }
     }
     // Check WKT / EWKT: e.g. "SRID=32643;POINT(385000 2045000)" or "POINT(385000 2045000)"
-    const sridMatch = str.match(/SRID\s*=\s*(\d+)\s*;/i);
-    if (sridMatch && sridMatch[1] !== '32643') {
+    const sridMatch = str.match(/SRID\s*=\s*([^\s;]+)\s*;/i);
+    if (sridMatch && !isValidUtm43nCrs(sridMatch[1])) {
       return null; // Reject explicit non-32643 SRID
     }
     const wktMatch = str.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);

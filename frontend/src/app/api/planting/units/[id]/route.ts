@@ -4,12 +4,14 @@ import {
   PU_NAMESPACE,
   uuidv5,
   isUtm43n,
+  isValidUtm43nCrs,
   parseCoordinates,
 } from '../../../../../lib/planting-unit-utils';
 export {
   PU_NAMESPACE,
   uuidv5,
   isUtm43n,
+  isValidUtm43nCrs,
   parseCoordinates,
 };
 
