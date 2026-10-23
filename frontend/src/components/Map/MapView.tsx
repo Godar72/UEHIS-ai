@@ -47,9 +47,14 @@ const MODEL_COVERAGE_LABEL_PAINT: Record<string, unknown> = {
 // to dynamically match selectedBlockId and layer visibility flags.
 
 const PLANTING_AREAS_FILL_PAINT: Record<string, unknown> = {
-  'fill-color': '#FEF3C7',
-  'fill-opacity': 0.6,
-  'fill-outline-color': '#FDE68A'
+  'fill-color': '#3D7650',
+  'fill-opacity': 0.16
+};
+
+const PLANTING_AREAS_OUTLINE_PAINT: Record<string, unknown> = {
+  'line-color': '#3D7650',
+  'line-width': 1.5,
+  'line-opacity': 0.85
 };
 
 const PLANTING_UNITS_CIRCLE_PAINT: Record<string, unknown> = {
@@ -330,10 +335,7 @@ function MapViewComponent({
           duration: 1200
         });
       }
-      queueMicrotask(() => {
-        setShowSearchLocationPopup(false);
-        setSelectedPoint({ lng: searchResult.lng, lat: searchResult.lat, name: searchResult.name });
-      });
+      setShowSearchLocationPopup(false);
     }
   }, [searchResult]);
 
@@ -723,6 +725,7 @@ function MapViewComponent({
         maxTileCacheZoomLevels={10}
         renderWorldCopies={false}
         fadeDuration={0}
+        styleDiffing={false}
         mapStyle={currentStyle}
         style={mapContainerStyle}
         interactiveLayerIds={INTERACTIVE_LAYER_IDS}
@@ -809,6 +812,13 @@ function MapViewComponent({
               source="planting-areas"
               source-layer="planting_candidate_areas"
               paint={PLANTING_AREAS_FILL_PAINT}
+            />
+            <Layer
+              id="planting-areas-outline-layer"
+              type="line"
+              source="planting-areas"
+              source-layer="planting_candidate_areas"
+              paint={PLANTING_AREAS_OUTLINE_PAINT}
             />
           </Source>
         )}

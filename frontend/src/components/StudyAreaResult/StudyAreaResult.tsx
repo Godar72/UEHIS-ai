@@ -120,15 +120,15 @@ export function StudyAreaResult({
 
   const animationProps = isDesktop
     ? {
-        initial: { x: '100%' },
-        animate: { x: 0 },
-        exit: { x: '100%' },
+        initial: { x: 380, y: 0 },
+        animate: { x: 0, y: 0 },
+        exit: { x: 380, y: 0 },
         transition: { type: 'spring' as const, damping: 28, stiffness: 220 }
       }
     : {
-        initial: { y: '100%' },
+        initial: { y: '70%' },
         animate: { y: 0 },
-        exit: { y: '100%' },
+        exit: { y: '70%' },
         transition: { type: 'spring' as const, damping: 28, stiffness: 220 }
       };
 

@@ -127,6 +127,8 @@ export function Search({ onLocationSelect, placeholder = 'Search a locality, roa
       e.preventDefault();
       if (selectedIndex >= 0 && selectedIndex < results.length) {
         handleSelect(results[selectedIndex]);
+      } else if (results.length > 0) {
+        handleSelect(results[0]);
       }
     } else if (e.key === 'Escape') {
       setIsOpen(false);

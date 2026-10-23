@@ -18,6 +18,10 @@ env/
 .env.*
 *.pem
 *.crt
+*-project-*.json
+*service-account*.json
+*credentials*.json
+uehis-*-key*.json
 
 # --- Large raster datasets ---
 *.tif
