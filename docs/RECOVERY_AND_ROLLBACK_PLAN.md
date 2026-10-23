@@ -1,18 +1,18 @@
 # UEHIS — Recovery, Pull Request, and Rollback Plan
 
-**Branch Name:** `recovery/aws-authoritative-reconstruction`  
-**Base Target:** `origin/main`  
-**Repository:** `https://github.com/Godar72/UEHIS-ai.git`  
+**Branch Name:** `recovery/aws-authoritative-reconstruction`
+**Base Target:** `origin/main`
+**Repository:** `https://github.com/Godar72/UEHIS-ai.git`
 
 ---
 
-## 1. Zero Production Mutation Confirmation
+## 1. Production Safety and Workspace Isolation
 
 In accordance with strict safety mandates:
 - **No changes have been pushed to GitHub `main`**.
-- **No containers on AWS were stopped, restarted, or rebuilt**.
+- **No production containers on AWS were stopped, restarted, or rebuilt during this audit**.
 - **No production databases, Nginx routes, or DNS records were modified**.
-- **The original workspace `C:\Users\adity\Desktop\SL` is 100% intact**.
+- **The original workspace `C:\Users\adity\Desktop\SL` remains intact**.
 
 ---
 
@@ -47,19 +47,25 @@ git push origin main
 
 ---
 
-## 4. Aligning Production AWS Post-Merge (Future Independent Step)
+## 4. Aligning Production AWS Post-Merge (Future Operational Procedure)
 
-Once the recovery branch is approved and merged into `main`:
-1. Connect via AWS Systems Manager session to the EC2 host.
+> [!WARNING]
+> **DO NOT EXECUTE AS PART OF PULL REQUEST REVIEW OR MERGE.**
+> The commands below represent a future operational procedure that requires a separate, explicit deployment authorization and must not be run while reviewing or merging this pull request. Production updates should only occur after this pull request is merged into `main` and a dedicated maintenance window is scheduled.
+
+### Future Operational Command Sequence (Requires Separate Deployment Approval)
+
+When production deployment is independently approved and scheduled:
+1. Connect via AWS Systems Manager session to the production EC2 host.
 2. In `/opt/uehis`:
    ```bash
    git fetch origin
    git checkout main
    git pull origin main
    ```
-3. Rebuild the frontend container to replace the dormant test containers:
+3. Rebuild and restart the frontend container:
    ```bash
    sudo docker compose build frontend
    sudo docker compose up -d frontend
    ```
-4. Verify Nginx routes to `uehis-frontend:latest` serving the verified 4-tier risk legend and positive scoring polarity.
+4. Verify that Nginx routes to the updated frontend container serving the verified 4-tier risk legend and positive scoring polarity.

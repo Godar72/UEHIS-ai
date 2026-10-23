@@ -1,15 +1,14 @@
 # UEHIS — Security Audit & Secret Quarantine Report
 
-**Audit Mode:** Automated Pattern Matching & Manual Tracked-Diff Review  
-**Target Directory:** `C:\Users\adity\Desktop\UEHIS-AWS-Recovery`  
-**Execution Timestamp:** `2026-10-23T23:30:00+05:30`  
-**Status:** **100% CLEAN — ZERO EXPOSURE**  
+**Audit Mode:** Automated Pattern Matching & Manual Tracked-Diff Review
+**Target Directory:** `C:\Users\adity\Desktop\UEHIS-AWS-Recovery`
+**Status:** **No matching credentials were detected in the scanned files using the documented checks**
 
 ---
 
 ## 1. Secret Scanning Results
 
-The entire staged diff and all newly created files in `C:\Users\adity\Desktop\UEHIS-AWS-Recovery` were scanned for sensitive patterns:
+The entire staged diff and all newly created files in `C:\Users\adity\Desktop\UEHIS-AWS-Recovery` were scanned for sensitive patterns under the documented detection rules:
 
 | Pattern Category | Search Regex | Matches Found | Action Taken |
 | :--- | :--- | :---: | :--- |
@@ -41,7 +40,7 @@ uehis-*-key*.json
 
 ## 3. Quarantined Production Files on Local Workstation
 
-The following files exist exclusively on the local machine for development and are **strictly excluded** from the Git index:
-- `uehis-sl-project-ac1157c9dad3.json` (Google Cloud GEE Service Account Key).
-- `uehis-production-key.pem` (AWS EC2 Private Key).
-- `.env` and `frontend/.env` (Database URIs and API tokens).
+The following file patterns exist exclusively on local development machines and are **strictly excluded** from the Git index:
+- Google Cloud GEE Service Account Key JSON files (`*-project-*.json`, `*service-account*.json`).
+- SSH Private Key PEM files (`*.pem`).
+- Environment configuration files containing tokens and connection strings (`.env`, `frontend/.env`).

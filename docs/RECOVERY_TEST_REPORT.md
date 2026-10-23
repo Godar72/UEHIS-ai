@@ -1,8 +1,7 @@
 # UEHIS — Recovery Test & Verification Report
 
-**Environment:** Windows, Python 3.12.10, Node.js v20+, TypeScript 5+, Next.js 16.3.6  
-**Target Repository:** `C:\Users\adity\Desktop\UEHIS-AWS-Recovery`  
-**Execution Timestamp:** `2026-10-23T23:28:00+05:30`  
+**Environment:** Windows, Python 3.12.10, Node.js v20+, TypeScript 5+, Next.js 16.3.6
+**Target Repository:** `C:\Users\adity\Desktop\UEHIS-AWS-Recovery`
 
 ---
 
@@ -19,7 +18,7 @@ tests/test_carbon_density_regression.py::TestCarbonDensityMathematics::test_cano
 tests/test_carbon_density_regression.py::TestCarbonDensityMathematics::test_gross_grid_normalized_density PASSED [ 10%]
 tests/test_carbon_density_regression.py::TestCarbonDensityMathematics::test_factor_of_ten_regression PASSED [ 15%]
 tests/test_carbon_density_regression.py::TestCarbonDensityMathematics::test_km2_to_ha_conversion PASSED [ 21%]
-tests/test_carbon_density_regression.py::TestProductionDatasetDensityIntegrity::test_production_csv_totals_and_density PASSED [ 26%]
+tests/test_carbon_density_regression.py::TestProductionDatasetDensityIntegrity::test_production_csv_totals_and_density SKIPPED [ 26%]
 tests/test_carbon_density_regression.py::TestStandingStockSemanticsCompatibility::test_standing_stock_column_names PASSED [ 31%]
 tests/test_carbon_density_regression.py::TestApiSummaryCarbonDensity::test_api_summary_density_calculation PASSED [ 36%]
 tests/test_location_search_and_planting.py::TestGeographicCoverageBounds::test_pune_core_localities_in_coverage PASSED [ 42%]
@@ -35,8 +34,10 @@ tests/test_location_search_and_planting.py::TestApiSecurityAndEndpointContracts:
 tests/test_location_search_and_planting.py::TestApiSecurityAndEndpointContracts::test_study_area_candidates_endpoint_structure PASSED [ 94%]
 tests/test_location_search_and_planting.py::TestApiSecurityAndEndpointContracts::test_invalid_geometry_rejected PASSED [100%]
 
-======================= 19 passed, 2 warnings in 65.97s =======================
+======================= 18 passed, 1 skipped, 2 warnings in 45.61s =======================
 ```
+
+*Note on Skipped Test:* `test_production_csv_totals_and_density` is guarded by `@pytest.mark.skipif` when the 33,000-row production CSV dataset is omitted from git checkouts (as intended). When the full CSV is present locally, all 19 tests execute and pass.
 
 ---
 
@@ -47,6 +48,8 @@ Command: node frontend/node_modules/typescript/bin/tsc --noEmit --project fronte
 Result: 0 errors (Passed cleanly in 4.1s)
 Exit Code: 0
 ```
+
+*Note on Clean Workspace:* In a fresh clone without `node_modules`, running `tsc` requires `npm install` or `npm ci` first to download project type definitions.
 
 ---
 

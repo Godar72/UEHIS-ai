@@ -1,31 +1,32 @@
 # UEHIS — GitHub Reconstruction Diff & Component Justification
 
-**Repository Target:** `recovery/aws-authoritative-reconstruction`  
-**Base Commit:** `c0170c42241aa118378eddc3727c25eeebb9b7f5` (`origin/main`)  
-**Reconstruction Workspace:** `C:\Users\adity\Desktop\UEHIS-AWS-Recovery`  
+**Repository Target:** `recovery/aws-authoritative-reconstruction`
+**Base Commit:** `c0170c42241aa118378eddc3727c25eeebb9b7f5` (`origin/main`)
+**Reconstruction Workspace:** `C:\Users\adity\Desktop\UEHIS-AWS-Recovery`
 
 ---
 
 ## 1. Summary of Changes
 
-This reconstruction incorporates the verified changes recovered from the AWS host (`/opt/uehis`), running container images (`uehis-api:latest`, `uehis-frontend:candidate-c0170c4`), and local stability test suites.
+This reconstruction incorporates the verified changes recovered from the AWS host (`/opt/uehis`), running API container inspection, and local stability test suites.
 
 ```
  .gitignore                                                         |   4 +
- docs/AWS_AUTHORITATIVE_RECOVERY.md                                 |  95 ++++++
- docs/GITHUB_RECONSTRUCTION_DIFF.md                                 |  85 ++++++
- docs/RECOVERY_AND_ROLLBACK_PLAN.md                                 |  75 +++++
- docs/RECOVERY_TEST_REPORT.md                                       |  80 +++++
- docs/SECURITY_AUDIT.md                                             |  65 +++++
- frontend/src/app/api/planting/units/[id]/route.ts                  | 123 ++---------
- frontend/src/app/explore/[[...slug]]/page.tsx                      |  74 ++++---
- frontend/src/components/Map/MapView.tsx                            |  24 ++-
+ docs/AWS_AUTHORITATIVE_RECOVERY.md                                 |  77 +++++++
+ docs/GITHUB_RECONSTRUCTION_DIFF.md                                 |  68 ++++++
+ docs/RECOVERY_AND_ROLLBACK_PLAN.md                                 |  65 ++++++
+ docs/RECOVERY_TEST_REPORT.md                                       |  64 ++++++
+ docs/SECURITY_AUDIT.md                                             |  47 ++++
+ frontend/src/app/api/planting/units/[id]/route.ts                  | 123 +---------
+ frontend/src/app/explore/[[...slug]]/page.tsx                      |  74 +++---
+ frontend/src/components/Map/MapView.tsx                            |  24 +-
  frontend/src/components/Sidebar/Search.tsx                         |   2 +
- frontend/src/components/StudyAreaResult/StudyAreaResult.module.css  |  23 ++-
- frontend/src/components/StudyAreaResult/StudyAreaResult.tsx         |  12 +-
+ frontend/src/components/StudyAreaResult/StudyAreaResult.module.css  |  21 +-
+ frontend/src/components/StudyAreaResult/StudyAreaResult.tsx         |  10 +-
  frontend/src/lib/planting-unit-utils.ts                            | 105 +++++++++
- tests/test_carbon_density_regression.py                            | 182 ++++++++++++++++
- tests/test_location_search_and_planting.py                         | 251 ++++++++++++++++++++++
+ tests/test_carbon_density_regression.py                            | 182 +++++++++++++++
+ tests/test_location_search_and_planting.py                         | 251 +++++++++++++++++++++
+ 15 files changed, 957 insertions(+), 160 deletions(-)
 ```
 
 ---
@@ -46,7 +47,7 @@ This reconstruction incorporates the verified changes recovered from the AWS hos
 
 ### 2.4 `frontend/src/components/Map/MapView.tsx`
 - **Origin:** Reconciled from AWS `/opt/uehis` working tree and local UX refinements.
-- **Justification:** 
+- **Justification:**
   - Sets planting candidate area fill to `#3D7650` (opacity 0.16) with line outline `#3D7650` (width 1.5, opacity 0.85).
   - Sets `styleDiffing={false}` on the `<Map>` element to eliminate MapLibre GL layer detachment and WebGL style flickering.
   - Eliminates microtask queue glitches when displaying the search origin marker popup.
