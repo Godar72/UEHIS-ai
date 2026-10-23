@@ -10,25 +10,15 @@ import { RightPanel, BlockResponse } from '@/components/RightPanel/RightPanel';
 interface ExploreBlockResponse extends BlockResponse {
   ward_name?: string;
 }
-import { StudyAreaResult, CandidateBlock, StudyAreaData } from '@/components/StudyAreaResult/StudyAreaResult';
+import { StudyAreaResult, CandidateBlock, StudyAreaData, StudyAreaUehi, StudyAreaCarbon } from '@/components/StudyAreaResult/StudyAreaResult';
 import { uehisClient, APIError } from '@/lib/api/client';
 import { recordActivity } from '@/lib/api/activity';
 import styles from '../page.module.css';
 
 export interface StudyAreaAnalysisResult {
-  uehi?: {
-    score?: number;
-    risk_level?: string;
-    total_blocks?: number;
-    distribution?: Record<string, number>;
-  } | null;
+  uehi?: StudyAreaUehi | null;
   provenance?: Record<string, unknown>;
-  carbon?: {
-    total_carbon?: number;
-    canopy_density?: number;
-    gross_grid_density?: number;
-    error?: string;
-  } | null;
+  carbon?: StudyAreaCarbon | null;
   candidate_blocks?: CandidateBlock[];
   total_blocks?: number;
 }
@@ -157,7 +147,14 @@ function ExploreContent() {
     try {
       // Step 1: Calculate UEHI Composite
       const uehiResponse = await uehisClient.studyArea.analyzeUehi(geometry) as StudyAreaAnalysisResult;
-      setStudyAreaData({ uehi: uehiResponse.uehi, provenance: uehiResponse.provenance, carbon: null });
+      const totalBlocks = uehiResponse?.total_blocks ?? uehiResponse?.uehi?.total_intersecting_blocks ?? uehiResponse?.uehi?.total_blocks ?? 0;
+      setStudyAreaData({
+        uehi: uehiResponse.uehi,
+        candidate_blocks: uehiResponse.candidate_blocks || [],
+        total_blocks: totalBlocks,
+        provenance: uehiResponse.provenance,
+        carbon: null
+      });
 
       // Record verified research operation
       recordActivity({
@@ -165,13 +162,13 @@ function ExploreContent() {
         category: 'analysis',
         action_type: 'analyzed',
         title: `Analyzed Study Area: ${locationName || 'Custom Boundary'}`,
-        description: `Study area evaluated across ${uehiResponse?.total_blocks || 0} blocks. Mean UEHI: ${uehiResponse?.uehi?.score ?? 'N/A'}`,
+        description: `Study area evaluated across ${totalBlocks} blocks. Mean UEHI: ${uehiResponse?.uehi?.score ?? 'N/A'}`,
         entity_type: 'study_area',
         entity_id: locationName || 'custom_area',
         metadata: {
           location_name: locationName,
           boundary_type: boundaryType,
-          total_blocks: uehiResponse?.total_blocks,
+          total_blocks: totalBlocks,
           mean_uehi: uehiResponse?.uehi?.score,
           radius: radiusMeters,
         },
@@ -241,23 +238,36 @@ function ExploreContent() {
         .then((res) => res.json())
         .then((data: unknown) => {
           if (Array.isArray(data) && data.length > 0) {
-            const first = data[0] as { lat: string; lon?: string; lng?: string; display_name?: string };
-            const lat = parseFloat(first.lat);
-            const lng = parseFloat(first.lon || first.lng || '0');
-            const locName = first.display_name?.split(',')[0] || nameParam;
+            const first = data[0] as {
+              latitude?: number;
+              longitude?: number;
+              lat?: string | number;
+              lon?: string | number;
+              lng?: string | number;
+              name?: string;
+              display_name?: string;
+            };
+            const lat = Number(first.latitude ?? first.lat);
+            const lng = Number(first.longitude ?? first.lon ?? first.lng ?? 0);
+            const locName = first.name || first.display_name?.split(',')[0] || nameParam;
             
-            setSearchResult({ lat, lng, name: locName, type: 'point_radius' });
-            
-            const circleGeom = circle([lng, lat], radius / 1000, { units: 'kilometers' }).geometry;
-            handleAnalyzeStudyArea(circleGeom, locName, 'point_radius', radius);
+            if (!isNaN(lat) && !isNaN(lng)) {
+              setSearchResult({ lat, lng, name: locName, type: 'point_radius' });
+              
+              const circleGeom = circle([lng, lat], radius / 1000, { units: 'kilometers' }).geometry;
+              handleAnalyzeStudyArea(circleGeom, locName, 'point_radius', radius);
 
-            // Update URL cleanly with geocoded coordinates
-            const currentUrl = new URL(window.location.href);
-            currentUrl.searchParams.set('lat', lat.toString());
-            currentUrl.searchParams.set('lng', lng.toString());
-            currentUrl.searchParams.set('radius', radius.toString());
-            currentUrl.searchParams.set('name', locName);
-            window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search);
+              // Update URL cleanly with geocoded coordinates
+              const currentUrl = new URL(window.location.href);
+              currentUrl.searchParams.set('lat', lat.toString());
+              currentUrl.searchParams.set('lng', lng.toString());
+              currentUrl.searchParams.set('radius', radius.toString());
+              currentUrl.searchParams.set('name', locName);
+              window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search);
+            } else {
+              setStudyAreaError(`Location "${nameParam}" coordinates could not be resolved.`);
+              setStudyAreaLoading(false);
+            }
           } else {
             setStudyAreaError(`Location "${nameParam}" could not be geocoded within Pune.`);
             setStudyAreaLoading(false);

@@ -18,15 +18,26 @@
 @media (min-width: 1024px) {
   .panel {
     position: relative;
-    width: 440px;
-    max-width: 440px;
+    inset: auto;
+    width: 380px;
+    min-width: 380px;
+    max-width: 380px;
     height: 100%;
-    left: auto;
-    right: auto;
+    min-height: 0;
+    max-height: none;
+    flex: 0 0 380px;
+    z-index: 30;
     border-top: none;
     border-left: 1px solid var(--outline-variant);
     box-shadow: -4px 0 16px rgba(0, 21, 68, 0.08);
-    flex-shrink: 0;
+    box-sizing: border-box;
+  }
+
+  .content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 
