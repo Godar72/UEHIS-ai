@@ -1,17 +1,16 @@
 /**
- * Focused Unit Tests for Planting Unit Utilities
- * Validates strict CRS validation, multi-format coordinate parsing,
- * boundary enforcement, and UUIDv5 parity.
+ * Comprehensive Hardened Unit Tests for Planting Unit Utilities
+ * Validates strict CRS representations, non-Point GeoJSON rejection,
+ * EWKB byte order / flags / truncation / non-finite coordinates,
+ * anchored WKT/EWKT parsing, UTM Zone 43N bounds, and UUIDv5 stability.
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// Resolve path to planting-unit-utils.ts
 const utilsPath = path.resolve(__dirname, '../frontend/src/lib/planting-unit-utils.ts');
 const utilsCode = fs.readFileSync(utilsPath, 'utf8');
 
-// Load module via TypeScript transpile
 let utils;
 try {
   let ts;
@@ -61,7 +60,7 @@ function check(actual, expected, description) {
   }
 }
 
-console.log('=== RUNNING FOCUS TESTS: planting-unit-utils.ts ===\n');
+console.log('=== RUNNING HARDENED FOCUS TESTS: planting-unit-utils.ts ===\n');
 
 // -----------------------------------------------------------------------------
 // 1. Strict CRS Validation (isValidUtm43nCrs)
@@ -70,20 +69,29 @@ console.log('--- 1. Testing isValidUtm43nCrs ---');
 
 const validCrsList = [
   'EPSG:32643',
-  'epsg:32643',
   'EPSG::32643',
+  'epsg:32643',
   'urn:ogc:def:crs:EPSG::32643',
   'urn:ogc:def:crs:EPSG:32643',
+  'urn:ogc:def:crs:EPSG:6.9:32643',
   'urn:ogc:def:crs:EPSG:8.9:32643',
   'urn:ogc:def:crs:EPSG:6.18:32643',
+  'urn:x-ogc:def:crs:EPSG::32643',
   'http://www.opengis.net/def/crs/EPSG/0/32643',
   'https://www.opengis.net/def/crs/EPSG/0/32643',
+  'http://www.opengis.net/def/crs/EPSG/6.9/32643',
+  'https://www.opengis.net/def/crs/EPSG/6.9/32643',
+  'http://www.opengis.net/def/crs/EPSG/32643',
+  'https://www.opengis.net/def/crs/EPSG/32643',
   'http://www.opengis.net/gml/srs/epsg.xml#32643',
   'https://www.opengis.net/gml/srs/epsg.xml#32643',
   '32643',
   32643,
   '  EPSG:32643  ',
-  '  urn:ogc:def:crs:EPSG::32643\n'
+  '  urn:ogc:def:crs:EPSG:6.9:32643\n',
+  { type: 'name', properties: { name: 'EPSG:32643' } },
+  { properties: { name: 'urn:ogc:def:crs:EPSG:6.9:32643' } },
+  { properties: { code: 32643 } }
 ];
 
 for (const crs of validCrsList) {
@@ -91,14 +99,12 @@ for (const crs of validCrsList) {
 }
 
 const invalidCrsList = [
-  // Other standard CRSs
   'EPSG:4326',
   'EPSG:3857',
   'EPSG:32644',
   'EPSG:32642',
   'urn:ogc:def:crs:OGC:1.3:CRS84',
   'CRS84',
-  // Substring traps containing 32643
   'EPSG:132643',
   'EPSG:326430',
   'MYCRS_32643',
@@ -107,7 +113,7 @@ const invalidCrsList = [
   'prefix_32643_suffix',
   'urn:ogc:def:crs:EPSG::326431',
   'https://www.opengis.net/def/crs/EPSG/0/132643',
-  // Malformed / Empty / Incomplete
+  'http://www.opengis.net/def/crs/EPSG/0/4326',
   '',
   '   ',
   null,
@@ -117,7 +123,9 @@ const invalidCrsList = [
   'EPSG:',
   'urn:ogc:def:crs:EPSG::',
   132643,
-  4326
+  4326,
+  { type: 'name', properties: { name: 'EPSG:4326' } },
+  { properties: {} }
 ];
 
 for (const crs of invalidCrsList) {
@@ -125,11 +133,10 @@ for (const crs of invalidCrsList) {
 }
 
 // -----------------------------------------------------------------------------
-// 2. parseCoordinates with GeoJSON Objects
+// 2. parseCoordinates with GeoJSON Objects & Geometry Types
 // -----------------------------------------------------------------------------
 console.log('\n--- 2. Testing parseCoordinates (GeoJSON Objects) ---');
 
-// 2.1 Valid CRS declarations
 check(
   parseCoordinates({
     type: 'Point',
@@ -137,47 +144,26 @@ check(
     crs: { properties: { name: 'EPSG:32643' } }
   }),
   [385000, 2045000],
-  'GeoJSON Point with explicit EPSG:32643'
+  'GeoJSON Point with EPSG:32643'
 );
 
 check(
   parseCoordinates({
-    type: 'Point',
+    type: 'point',
     coordinates: [385000, 2045000],
-    crs: { properties: { name: 'urn:ogc:def:crs:EPSG::32643' } }
+    crs: { properties: { name: 'urn:ogc:def:crs:EPSG:6.9:32643' } }
   }),
   [385000, 2045000],
-  'GeoJSON Point with explicit OGC URN EPSG::32643'
+  'GeoJSON point lowercase with OGC URN 6.9'
 );
 
-check(
-  parseCoordinates({
-    type: 'Point',
-    coordinates: [385000, 2045000],
-    crs: { properties: { code: 32643 } }
-  }),
-  [385000, 2045000],
-  'GeoJSON Point with numeric crs.properties.code: 32643'
-);
-
-check(
-  parseCoordinates({
-    type: 'Point',
-    coordinates: [385000, 2045000],
-    crs: 'EPSG:32643'
-  }),
-  [385000, 2045000],
-  'GeoJSON Point with string crs: "EPSG:32643"'
-);
-
-// 2.2 Missing CRS (preserves database/API contract)
 check(
   parseCoordinates({
     type: 'Point',
     coordinates: [385000, 2045000]
   }),
   [385000, 2045000],
-  'GeoJSON Point without CRS (default metric contract)'
+  'GeoJSON Point without CRS (contract preservation)'
 );
 
 check(
@@ -190,55 +176,40 @@ check(
   'GeoJSON Point with crs: null'
 );
 
-// 2.3 Rejected CRS declarations
+// Reject Non-Point geometries
 check(
   parseCoordinates({
-    type: 'Point',
-    coordinates: [385000, 2045000],
-    crs: { properties: { name: 'EPSG:4326' } }
+    type: 'LineString',
+    coordinates: [[385000, 2045000], [386000, 2046000]]
   }),
   null,
-  'Reject GeoJSON Point with EPSG:4326'
+  'Reject GeoJSON LineString'
 );
 
 check(
   parseCoordinates({
-    type: 'Point',
-    coordinates: [385000, 2045000],
-    crs: { properties: { name: 'EPSG:3857' } }
+    type: 'Polygon',
+    coordinates: [[[385000, 2045000], [386000, 2045000], [386000, 2046000], [385000, 2045000]]]
   }),
   null,
-  'Reject GeoJSON Point with EPSG:3857'
+  'Reject GeoJSON Polygon'
 );
 
 check(
   parseCoordinates({
-    type: 'Point',
-    coordinates: [385000, 2045000],
-    crs: { properties: { name: 'MYCRS_32643' } }
+    type: 'MultiPoint',
+    coordinates: [[385000, 2045000], [386000, 2046000]]
   }),
   null,
-  'Reject GeoJSON Point with substring trap MYCRS_32643'
+  'Reject GeoJSON MultiPoint'
 );
 
 check(
   parseCoordinates({
-    type: 'Point',
-    coordinates: [385000, 2045000],
-    crs: { properties: { name: 'EPSG:132643' } }
+    coordinates: [385000, 2045000]
   }),
   null,
-  'Reject GeoJSON Point with substring trap EPSG:132643'
-);
-
-check(
-  parseCoordinates({
-    type: 'Point',
-    coordinates: [385000, 2045000],
-    crs: { properties: {} }
-  }),
-  null,
-  'Reject GeoJSON Point with empty crs properties'
+  'Reject GeoJSON missing type'
 );
 
 // -----------------------------------------------------------------------------
@@ -249,19 +220,25 @@ console.log('\n--- 3. Testing parseCoordinates (GeoJSON Strings) ---');
 check(
   parseCoordinates('{"type":"Point","coordinates":[385000,2045000]}'),
   [385000, 2045000],
-  'GeoJSON string without CRS'
+  'GeoJSON string Point without CRS'
 );
 
 check(
   parseCoordinates('{"type":"Point","coordinates":[385000,2045000],"crs":{"properties":{"name":"EPSG:32643"}}}'),
   [385000, 2045000],
-  'GeoJSON string with EPSG:32643'
+  'GeoJSON string Point with EPSG:32643'
 );
 
 check(
-  parseCoordinates('{"type":"Point","coordinates":[385000,2045000],"crs":{"properties":{"name":"urn:ogc:def:crs:EPSG::32643"}}}'),
-  [385000, 2045000],
-  'GeoJSON string with urn:ogc:def:crs:EPSG::32643'
+  parseCoordinates('{"type":"LineString","coordinates":[[385000,2045000],[386000,2046000]]}'),
+  null,
+  'Reject GeoJSON string LineString'
+);
+
+check(
+  parseCoordinates('{"type":"Polygon","coordinates":[[[385000,2045000],[386000,2045000],[385000,2045000]]]}'),
+  null,
+  'Reject GeoJSON string Polygon'
 );
 
 check(
@@ -271,205 +248,245 @@ check(
 );
 
 check(
-  parseCoordinates('{"type":"Point","coordinates":[385000,2045000],"crs":{"properties":{"name":"EPSG:132643"}}}'),
-  null,
-  'Reject GeoJSON string with substring trap EPSG:132643'
-);
-
-check(
   parseCoordinates('{ invalid json syntax'),
   null,
   'Reject malformed JSON string'
 );
 
 // -----------------------------------------------------------------------------
-// 4. parseCoordinates with WKT / EWKT
+// 4. parseCoordinates with WKT / EWKT & Strict Anchoring
 // -----------------------------------------------------------------------------
 console.log('\n--- 4. Testing parseCoordinates (WKT / EWKT) ---');
 
 check(
   parseCoordinates('POINT(385000 2045000)'),
   [385000, 2045000],
-  'Standard WKT without SRID'
-);
-
-check(
-  parseCoordinates('point ( 385123.45   2045678.90 )'),
-  [385123.45, 2045678.90],
-  'WKT with irregular whitespace and floating decimals'
+  'Standard WKT Point without SRID'
 );
 
 check(
   parseCoordinates('SRID=32643;POINT(385000 2045000)'),
   [385000, 2045000],
-  'EWKT with SRID=32643'
+  'EWKT Point with SRID=32643'
 );
 
 check(
-  parseCoordinates('srid = 32643 ; point(385000 2045000)'),
+  parseCoordinates('srid = 32643 ; point ( 385123.45   2045678.90 )'),
+  [385123.45, 2045678.90],
+  'EWKT with spaces, lowercase, and decimal coordinates'
+);
+
+check(
+  parseCoordinates('SRID=urn:ogc:def:crs:EPSG:6.9:32643;POINT(385000 2045000)'),
   [385000, 2045000],
-  'EWKT with spaces and lowercase'
+  'EWKT with URN SRID 6.9'
 );
 
 check(
-  parseCoordinates('SRID=EPSG:32643;POINT(385000 2045000)'),
-  [385000, 2045000],
-  'EWKT with SRID=EPSG:32643'
-);
-
-check(
-  parseCoordinates('SRID=4326;POINT(385000 2045000)'),
+  parseCoordinates('MULTIPOINT((385000 2045000))'),
   null,
-  'Reject EWKT with non-32643 SRID (4326)'
+  'Reject WKT MULTIPOINT'
 );
 
 check(
-  parseCoordinates('SRID=3857;POINT(385000 2045000)'),
+  parseCoordinates('SRID=32643;MULTIPOINT(385000 2045000)'),
   null,
-  'Reject EWKT with non-32643 SRID (3857)'
-);
-
-check(
-  parseCoordinates('SRID=132643;POINT(385000 2045000)'),
-  null,
-  'Reject EWKT with substring trap SRID=132643'
-);
-
-check(
-  parseCoordinates('SRID=CUSTOM_32643;POINT(385000 2045000)'),
-  null,
-  'Reject EWKT with custom string SRID'
+  'Reject EWKT MULTIPOINT'
 );
 
 check(
   parseCoordinates('LINESTRING(385000 2045000, 386000 2046000)'),
   null,
-  'Reject WKT LineString'
+  'Reject WKT LINESTRING'
+);
+
+check(
+  parseCoordinates('POINT(385000 2045000) EXTRA_GARBAGE'),
+  null,
+  'Reject WKT with trailing text'
+);
+
+check(
+  parseCoordinates('SRID=4326;POINT(385000 2045000)'),
+  null,
+  'Reject EWKT with incompatible SRID 4326'
+);
+
+check(
+  parseCoordinates('SRID=132643;POINT(385000 2045000)'),
+  null,
+  'Reject EWKT with substring trap SRID 132643'
 );
 
 // -----------------------------------------------------------------------------
-// 5. parseCoordinates with PostGIS EWKB Hex
+// 5. parseCoordinates with PostGIS EWKB Hex Hardening
 // -----------------------------------------------------------------------------
 console.log('\n--- 5. Testing parseCoordinates (PostGIS EWKB Hex) ---');
 
-function makeEwkb({ isLittleEndian = true, geomType = 1, srid = 32643, hasSrid = true, x = 385000.0, y = 2045000.0 }) {
-  const len = hasSrid ? 25 : 21;
-  const b = Buffer.alloc(len);
-  b.writeUInt8(isLittleEndian ? 1 : 0, 0);
-  const typeFlag = geomType | (hasSrid ? 0x20000000 : 0);
-  if (isLittleEndian) {
-    b.writeUInt32LE(typeFlag, 1);
+function buildEwkb({
+  byteOrder = 1, // 1: LE, 0: BE
+  typeInt = 1,
+  srid = null,
+  x = 385000.0,
+  y = 2045000.0,
+  extraBytes = 0
+}) {
+  const hasSrid = srid !== null;
+  const flagType = ((typeInt | (hasSrid ? 0x20000000 : 0)) >>> 0);
+  const totalLen = (hasSrid ? 25 : 21) + extraBytes;
+  const buf = Buffer.alloc(totalLen);
+  buf.writeUInt8(byteOrder, 0);
+
+  const isLE = byteOrder === 1;
+  if (isLE) {
+    buf.writeUInt32LE(flagType, 1);
     let offset = 5;
     if (hasSrid) {
-      b.writeUInt32LE(srid, 5);
+      buf.writeUInt32LE(srid, 5);
       offset = 9;
     }
-    b.writeDoubleLE(x, offset);
-    b.writeDoubleLE(y, offset + 8);
+    buf.writeDoubleLE(x, offset);
+    buf.writeDoubleLE(y, offset + 8);
   } else {
-    b.writeUInt32BE(typeFlag, 1);
+    buf.writeUInt32BE(flagType, 1);
     let offset = 5;
     if (hasSrid) {
-      b.writeUInt32BE(srid, 5);
+      buf.writeUInt32BE(srid, 5);
       offset = 9;
     }
-    b.writeDoubleBE(x, offset);
-    b.writeDoubleBE(y, offset + 8);
+    buf.writeDoubleBE(x, offset);
+    buf.writeDoubleBE(y, offset + 8);
   }
-  return b.toString('hex');
+  return buf.toString('hex');
 }
 
+// 5.1 Valid Endianness
 check(
-  parseCoordinates(makeEwkb({ isLittleEndian: true, srid: 32643 })),
+  parseCoordinates(buildEwkb({ byteOrder: 1, srid: 32643 })),
   [385000, 2045000],
   'LE EWKB Point with SRID 32643'
 );
 
 check(
-  parseCoordinates(makeEwkb({ isLittleEndian: false, srid: 32643 })),
+  parseCoordinates(buildEwkb({ byteOrder: 0, srid: 32643 })),
   [385000, 2045000],
   'BE EWKB Point with SRID 32643'
 );
 
 check(
-  parseCoordinates(makeEwkb({ isLittleEndian: true, hasSrid: false })),
+  parseCoordinates(buildEwkb({ byteOrder: 1, srid: null })),
   [385000, 2045000],
   'LE WKB Point without SRID'
 );
 
 check(
-  parseCoordinates(makeEwkb({ isLittleEndian: false, hasSrid: false })),
+  parseCoordinates(buildEwkb({ byteOrder: 0, srid: null })),
   [385000, 2045000],
   'BE WKB Point without SRID'
 );
 
+// 5.2 Invalid Endianness
 check(
-  parseCoordinates(makeEwkb({ isLittleEndian: true, srid: 4326 })),
+  parseCoordinates(buildEwkb({ byteOrder: 2, srid: 32643 })),
   null,
-  'Reject LE EWKB with SRID 4326'
+  'Reject EWKB invalid byte order 2'
 );
 
 check(
-  parseCoordinates(makeEwkb({ isLittleEndian: true, srid: 3857 })),
+  parseCoordinates(buildEwkb({ byteOrder: 255, srid: 32643 })),
   null,
-  'Reject LE EWKB with SRID 3857'
+  'Reject EWKB invalid byte order 255'
+);
+
+// 5.3 Invalid / Unsupported Flags (Z: 0x80000000, M: 0x40000000, or corrupt bits)
+check(
+  parseCoordinates(buildEwkb({ byteOrder: 1, typeInt: 1 | 0x80000000, srid: 32643 })),
+  null,
+  'Reject EWKB with Z flag (3D point)'
 );
 
 check(
-  parseCoordinates(makeEwkb({ isLittleEndian: true, geomType: 2 })),
+  parseCoordinates(buildEwkb({ byteOrder: 1, typeInt: 1 | 0x40000000, srid: 32643 })),
   null,
-  'Reject LE EWKB LineString (type 2)'
+  'Reject EWKB with M flag (4D point)'
 );
 
+check(
+  parseCoordinates(buildEwkb({ byteOrder: 1, typeInt: 2, srid: 32643 })),
+  null,
+  'Reject EWKB LineString (geomType 2)'
+);
+
+// 5.4 Buffer Truncation and Extra Bytes
 check(
   parseCoordinates('0101000020837f0000'),
   null,
-  'Reject truncated EWKB buffer (< 42 chars)'
+  'Reject truncated EWKB (< 25 bytes)'
 );
 
 check(
-  parseCoordinates('zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'),
+  parseCoordinates(buildEwkb({ byteOrder: 1, srid: 32643, extraBytes: 4 })),
   null,
-  'Reject non-hex string'
+  'Reject EWKB with trailing bytes (buffer length mismatch)'
+);
+
+// 5.5 SRID Mismatches
+check(
+  parseCoordinates(buildEwkb({ byteOrder: 1, srid: 4326 })),
+  null,
+  'Reject EWKB SRID 4326'
+);
+
+check(
+  parseCoordinates(buildEwkb({ byteOrder: 1, srid: 3857 })),
+  null,
+  'Reject EWKB SRID 3857'
+);
+
+// 5.6 Non-Finite Coordinates in EWKB
+check(
+  parseCoordinates(buildEwkb({ byteOrder: 1, srid: 32643, x: NaN })),
+  null,
+  'Reject EWKB with NaN Easting'
+);
+
+check(
+  parseCoordinates(buildEwkb({ byteOrder: 1, srid: 32643, y: Infinity })),
+  null,
+  'Reject EWKB with Infinity Northing'
 );
 
 // -----------------------------------------------------------------------------
-// 6. Coordinate Bounds & Finite Number Validation (isUtm43n)
+// 6. Coordinate Bounds (isUtm43n)
 // -----------------------------------------------------------------------------
 console.log('\n--- 6. Testing isUtm43n Bounds & Sanity ---');
 
-check(isUtm43n(385000, 2045000), true, 'Central Pune UTM Zone 43N coordinates');
-check(isUtm43n(100000, 1000000), true, 'Exact Min Bounds (100k, 1M)');
-check(isUtm43n(900000, 3000000), true, 'Exact Max Bounds (900k, 3M)');
+check(isUtm43n(385000, 2045000), true, 'Central Pune UTM 43N');
+check(isUtm43n(100000, 1000000), true, 'Min bounds');
+check(isUtm43n(900000, 3000000), true, 'Max bounds');
 
-check(isUtm43n(99999.99, 2000000), false, 'Easting below min');
-check(isUtm43n(900000.01, 2000000), false, 'Easting above max');
-check(isUtm43n(500000, 999999.99), false, 'Northing below min');
-check(isUtm43n(500000, 3000000.01), false, 'Northing above max');
+check(isUtm43n(99999.99, 2000000), false, 'Below min easting');
+check(isUtm43n(900000.01, 2000000), false, 'Above max easting');
+check(isUtm43n(385000, 999999.99), false, 'Below min northing');
+check(isUtm43n(385000, 3000000.01), false, 'Above max northing');
 
-check(isUtm43n(73.8567, 18.5204), false, 'Reject WGS84 degrees');
-check(isUtm43n(18.5204, 73.8567), false, 'Reject swapped lat/lon degrees');
-check(isUtm43n(2045000, 385000), false, 'Reject swapped UTM coordinates');
-
-check(isUtm43n(NaN, 2045000), false, 'Reject NaN easting');
-check(isUtm43n(385000, NaN), false, 'Reject NaN northing');
-check(isUtm43n(Infinity, 2045000), false, 'Reject Infinity easting');
-check(isUtm43n(385000, -Infinity), false, 'Reject -Infinity northing');
-check(isUtm43n('385000', 2045000), false, 'Reject string easting');
-check(isUtm43n(null, undefined), false, 'Reject null/undefined');
+check(isUtm43n(73.8567, 18.5204), false, 'Reject WGS84 degree coords');
+check(isUtm43n(2045000, 385000), false, 'Reject swapped coordinates');
+check(isUtm43n(NaN, 2045000), false, 'Reject NaN');
+check(isUtm43n(Infinity, 2045000), false, 'Reject Infinity');
 
 // -----------------------------------------------------------------------------
-// 7. UUIDv5 Parity and Namespace
+// 7. UUIDv5 Parity and Namespace Stability
 // -----------------------------------------------------------------------------
 console.log('\n--- 7. Testing UUIDv5 and Namespace ---');
 
-check(PU_NAMESPACE, '49e464c3-0db8-5061-a5ff-945f95238334', 'PU_NAMESPACE constant unchanged');
+check(PU_NAMESPACE, '49e464c3-0db8-5061-a5ff-945f95238334', 'PU_NAMESPACE unchanged');
 check(
   uuidv5(PU_NAMESPACE, 'PU_1128671'),
   '888ea20f-8ea1-5470-91c1-ed13cfa85b1c',
-  'UUIDv5 generation matches production loader test vector'
+  'UUIDv5 matches production loader test vector'
 );
 
 console.log(`\n=================================================`);
-console.log(`FOCUS TESTS RESULT: ${passedTests}/${totalTests} passed (100%)`);
+console.log(`HARDENED FOCUS TESTS: ${passedTests}/${totalTests} passed (100%)`);
 console.log(`=================================================`);

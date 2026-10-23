@@ -40,109 +40,171 @@ export function isUtm43n(x: number, y: number): boolean {
  * Supported formats (case-insensitive, trimmed):
  * - Short code: "EPSG:32643", "EPSG::32643", "32643", or numeric 32643
  * - OGC URN: "urn:ogc:def:crs:EPSG::32643", "urn:ogc:def:crs:EPSG:32643", "urn:ogc:def:crs:EPSG:<version>:32643"
- * - OGC URI: "http(s)://www.opengis.net/def/crs/EPSG/0/32643", "http(s)://www.opengis.net/gml/srs/epsg.xml#32643"
+ * - Legacy OGC URN: "urn:x-ogc:def:crs:EPSG::32643"
+ * - OGC URI: "http(s)://www.opengis.net/def/crs/EPSG/<version>/32643", "http(s)://www.opengis.net/gml/srs/epsg.xml#32643"
+ * - GeoJSON CRS object: { type: 'name', properties: { name: '...' } } or { properties: { code: 32643 } }
  *
  * Rejects:
- * - Substring traps (e.g., "EPSG:132643", "MYCRS_32643", "CUSTOM_32643_PROJECTED")
+ * - Substring traps (e.g., "EPSG:132643", "MYCRS_32643", "CUSTOM_32643_PROJECTED", "32643_CUSTOM")
  * - Incompatible CRSs (e.g., "EPSG:4326", "EPSG:3857", "EPSG:32644", "CRS84")
  * - Malformed, empty, or non-matching inputs
  */
 export function isValidUtm43nCrs(crsIdentifier: unknown): boolean {
   if (crsIdentifier === 32643) return true;
-  if (typeof crsIdentifier !== 'string') return false;
+  if (!crsIdentifier) return false;
 
-  const trimmed = crsIdentifier.trim();
+  let identifierStr: unknown = crsIdentifier;
+  if (typeof crsIdentifier === 'object' && crsIdentifier !== null) {
+    const crsObj = crsIdentifier as {
+      type?: unknown;
+      properties?: { name?: unknown; code?: unknown };
+    };
+    identifierStr = crsObj.properties?.name ?? crsObj.properties?.code;
+    if (identifierStr === 32643) return true;
+  }
+
+  if (typeof identifierStr !== 'string') return false;
+
+  const trimmed = identifierStr.trim();
   if (!trimmed) return false;
 
   const utm43nPattern =
-    /^(?:(?:urn:ogc:def:crs:EPSG:(?:[0-9.]*:)?|EPSG:{1,2}|https?:\/\/www\.opengis\.net\/(?:def\/crs\/EPSG\/0\/|gml\/srs\/epsg\.xml#))?32643)$/i;
+    /^(?:(?:urn:(?:x-)?ogc:def:crs:EPSG:(?:[0-9.]*:)?|EPSG:{1,2}|https?:\/\/www\.opengis\.net\/(?:def\/crs\/EPSG\/(?:[0-9.]*\/)?|gml\/srs\/epsg\.xml#))?32643)$/i;
 
   return utm43nPattern.test(trimmed);
 }
 
 export function parseCoordinates(geom: unknown): [number, number] | null {
   if (!geom) return null;
-  // 1. GeoJSON object format: { type: 'Point', coordinates: [x, y] }
+
+  // 1. GeoJSON object format: { type: 'Point', coordinates: [x, y], crs?: ... }
   if (typeof geom === 'object' && geom !== null && 'coordinates' in geom) {
     const obj = geom as {
-      type?: string;
+      type?: unknown;
       coordinates?: unknown;
-      crs?: { properties?: { name?: unknown; code?: unknown } } | string | null;
+      crs?: unknown;
     };
-    if (obj.crs != null) {
-      const crsId =
-        typeof obj.crs === 'string'
-          ? obj.crs
-          : (obj.crs.properties?.name ?? obj.crs.properties?.code);
-      if (!isValidUtm43nCrs(crsId)) {
-        return null;
-      }
+
+    // Enforce Point geometry type
+    if (typeof obj.type !== 'string' || obj.type.trim().toLowerCase() !== 'point') {
+      return null;
     }
+
+    // If explicit CRS is present, it must be valid EPSG:32643
+    if (obj.crs != null && !isValidUtm43nCrs(obj.crs)) {
+      return null;
+    }
+
     const coords = obj.coordinates;
     if (Array.isArray(coords) && coords.length >= 2) {
       const x = Number(coords[0]);
       const y = Number(coords[1]);
-      if (isUtm43n(x, y)) return [x, y];
+      if (Number.isFinite(x) && Number.isFinite(y) && isUtm43n(x, y)) {
+        return [x, y];
+      }
     }
+    return null;
   }
-  // 2. String representation (JSON, WKT, or PostGIS EWKB hex)
+
+  // 2. String representation (JSON string, WKT/EWKT, or PostGIS EWKB hex)
   if (typeof geom === 'string') {
     const str = geom.trim();
+    if (!str) return null;
+
+    // 2.1 GeoJSON JSON string
     if (str.startsWith('{')) {
       try {
         const parsed = JSON.parse(str);
-        if (parsed.crs != null) {
-          const crsId =
-            typeof parsed.crs === 'string'
-              ? parsed.crs
-              : (parsed.crs.properties?.name ?? parsed.crs.properties?.code);
-          if (!isValidUtm43nCrs(crsId)) {
+        if (typeof parsed === 'object' && parsed !== null && 'coordinates' in parsed) {
+          // Enforce Point geometry type
+          if (typeof parsed.type !== 'string' || parsed.type.trim().toLowerCase() !== 'point') {
             return null;
           }
+
+          // If explicit CRS is present, it must be valid EPSG:32643
+          if (parsed.crs != null && !isValidUtm43nCrs(parsed.crs)) {
+            return null;
+          }
+
+          const coords = parsed.coordinates;
+          if (Array.isArray(coords) && coords.length >= 2) {
+            const x = Number(coords[0]);
+            const y = Number(coords[1]);
+            if (Number.isFinite(x) && Number.isFinite(y) && isUtm43n(x, y)) {
+              return [x, y];
+            }
+          }
         }
-        if (parsed.coordinates && Array.isArray(parsed.coordinates) && parsed.coordinates.length >= 2) {
-          const x = Number(parsed.coordinates[0]);
-          const y = Number(parsed.coordinates[1]);
-          if (isUtm43n(x, y)) return [x, y];
-        }
+        return null;
       } catch {
-        // Not valid JSON
+        return null;
       }
     }
-    // Check WKT / EWKT: e.g. "SRID=32643;POINT(385000 2045000)" or "POINT(385000 2045000)"
-    const sridMatch = str.match(/SRID\s*=\s*([^\s;]+)\s*;/i);
-    if (sridMatch && !isValidUtm43nCrs(sridMatch[1])) {
-      return null; // Reject explicit non-32643 SRID
-    }
-    const wktMatch = str.match(/POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i);
+
+    // 2.2 WKT / EWKT Point: e.g. "SRID=32643;POINT(385000 2045000)" or "POINT(385000 2045000)"
+    const wktPattern = /^(?:SRID\s*=\s*([^;]+)\s*;\s*)?POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)$/i;
+    const wktMatch = str.match(wktPattern);
     if (wktMatch) {
-      const x = Number(wktMatch[1]);
-      const y = Number(wktMatch[2]);
-      if (isUtm43n(x, y)) return [x, y];
+      const sridDecl = wktMatch[1];
+      if (sridDecl !== undefined && !isValidUtm43nCrs(sridDecl)) {
+        return null; // Reject explicit non-32643 SRID
+      }
+      const x = Number(wktMatch[2]);
+      const y = Number(wktMatch[3]);
+      if (Number.isFinite(x) && Number.isFinite(y) && isUtm43n(x, y)) {
+        return [x, y];
+      }
+      return null;
     }
-    // Check PostGIS EWKB hex string
-    if (/^[0-9a-fA-F]{42,}$/.test(str)) {
+
+    // Explicit rejection if string attempted SRID or POINT with invalid/unsupported geometry
+    if (/^SRID\s*=/i.test(str) || /\bPOINT\b/i.test(str)) {
+      return null;
+    }
+
+    // 2.3 PostGIS EWKB hex string
+    if (/^[0-9a-fA-F]+$/.test(str) && str.length % 2 === 0) {
       try {
         const buf = Buffer.from(str, 'hex');
-        const isLittleEndian = buf.readUInt8(0) === 1;
+        // Minimum 5 bytes: 1 byte byte-order + 4 bytes type
+        if (buf.length < 5) return null;
+
+        // Byte order: 0 (Big-Endian/XDR) or 1 (Little-Endian/NDR)
+        const byteOrder = buf.readUInt8(0);
+        if (byteOrder !== 0 && byteOrder !== 1) return null;
+        const isLittleEndian = byteOrder === 1;
+
+        // Geometry type integer
         const typeInt = isLittleEndian ? buf.readUInt32LE(1) : buf.readUInt32BE(1);
         const geomType = typeInt & 0x1f;
         if (geomType !== 1) return null; // Must be Point
+
+        // EWKB flags: only SRID (0x20000000) allowed for standard 2D Point
+        if ((typeInt & 0xdfffffe0) !== 0) return null;
+
         const hasSrid = (typeInt & 0x20000000) !== 0;
+        let coordOffset = 5;
+
         if (hasSrid) {
+          if (buf.length < 9) return null;
           const srid = isLittleEndian ? buf.readUInt32LE(5) : buf.readUInt32BE(5);
-          if (srid !== 32643 && srid !== 0) return null; // Reject non-32643 SRID
+          if (srid !== 32643 && srid !== 0) return null;
+          coordOffset = 9;
         }
-        const coordOffset = hasSrid ? 9 : 5;
-        if (buf.length >= coordOffset + 16) {
-          const x = isLittleEndian ? buf.readDoubleLE(coordOffset) : buf.readDoubleBE(coordOffset);
-          const y = isLittleEndian ? buf.readDoubleLE(coordOffset + 8) : buf.readDoubleBE(coordOffset + 8);
-          if (isUtm43n(x, y)) return [x, y];
-        }
+
+        // Exact length check for 2D Point (2 doubles = 16 bytes)
+        if (buf.length !== coordOffset + 16) return null;
+
+        const x = isLittleEndian ? buf.readDoubleLE(coordOffset) : buf.readDoubleBE(coordOffset);
+        const y = isLittleEndian ? buf.readDoubleLE(coordOffset + 8) : buf.readDoubleBE(coordOffset + 8);
+
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        if (isUtm43n(x, y)) return [x, y];
       } catch {
-        // Hex parse failed
+        return null;
       }
     }
   }
+
   return null;
 }
