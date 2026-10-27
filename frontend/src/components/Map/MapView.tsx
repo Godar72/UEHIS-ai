@@ -17,7 +17,7 @@ if (typeof window !== 'undefined') {
 const UEHI_TILES = ['/tiles/uehi/{z}/{x}/{y}.pbf'];
 const CARBON_TILES = ['/tiles/carbon/{z}/{x}/{y}.pbf'];
 const PLANTING_AREAS_TILES = ['/tiles/planting-areas/{z}/{x}/{y}.pbf'];
-const INTERACTIVE_LAYER_IDS = ['uehi-layer', 'carbon-layer', 'planting-units-layer', 'planting-areas-layer'];
+const INTERACTIVE_LAYER_IDS = ['uehi-layer', 'carbon-layer', 'planting-units-layer', 'planting-units-vt-layer', 'planting-areas-layer'];
 
 const MODEL_COVERAGE_LINE_PAINT: Record<string, unknown> = {
   'line-color': '#FFFFFF',
@@ -417,10 +417,14 @@ function MapViewComponent({
 
     map.on('mouseenter', 'planting-units-layer', handleMouseEnter);
     map.on('mouseleave', 'planting-units-layer', handleMouseLeave);
+    map.on('mouseenter', 'planting-units-vt-layer', handleMouseEnter);
+    map.on('mouseleave', 'planting-units-vt-layer', handleMouseLeave);
 
     return () => {
       map.off('mouseenter', 'planting-units-layer', handleMouseEnter);
       map.off('mouseleave', 'planting-units-layer', handleMouseLeave);
+      map.off('mouseenter', 'planting-units-vt-layer', handleMouseEnter);
+      map.off('mouseleave', 'planting-units-vt-layer', handleMouseLeave);
     };
   }, [plantingConfig?.showUnits]);
 
@@ -432,8 +436,10 @@ function MapViewComponent({
     }
 
     const map = event.target || mapRef.current?.getMap();
-    // Prioritize planting units over underlying polygon areas
-    let feature = event.features?.find((f: maplibregl.MapGeoJSONFeature) => f.layer.id === 'planting-units-layer');
+    // Prioritize planting units over underlying polygon areas (check both filtered GeoJSON and VT layer IDs)
+    let feature = event.features?.find((f: maplibregl.MapGeoJSONFeature) =>
+      f.layer.id === 'planting-units-layer' || f.layer.id === 'planting-units-vt-layer'
+    );
     
     // Resilient fallback query with 6px tolerance for precise touch & click targeting on points
     if (!feature && map && event.point) {
@@ -441,7 +447,7 @@ function MapViewComponent({
         [event.point.x - 6, event.point.y - 6],
         [event.point.x + 6, event.point.y + 6]
       ];
-      const directUnits = map.queryRenderedFeatures(bbox, { layers: ['planting-units-layer'] });
+      const directUnits = map.queryRenderedFeatures(bbox, { layers: ['planting-units-layer', 'planting-units-vt-layer'] });
       if (directUnits && directUnits.length > 0) {
         feature = directUnits[0];
       }
@@ -463,7 +469,7 @@ function MapViewComponent({
     }
 
     if (feature) {
-      if (feature.layer.id === 'planting-units-layer') {
+      if (feature.layer.id === 'planting-units-layer' || feature.layer.id === 'planting-units-vt-layer') {
         const unitFeature = feature;
 
         let exactLng = event.lngLat.lng;
@@ -797,8 +803,11 @@ function MapViewComponent({
           </Source>
         )}
 
-        {/* Planting Candidate Areas Layer */}
-        {plantingConfig?.showAreas && (
+        {/* Planting Candidate Areas Layer — city-wide vector tiles.
+             Only rendered when NO spatial filter is active (no filteredGeoJson).
+             When filteredGeoJson is present, this layer is unmounted so city-wide
+             polygons cannot leak outside the active spatial selection. */}
+        {plantingConfig?.showAreas && !plantingConfig.filteredGeoJson && (
           <Source
             id="planting-areas"
             type="vector"
@@ -823,18 +832,10 @@ function MapViewComponent({
           </Source>
         )}
 
-        {/* Filtered Planting Units (GeoJSON) */}
-        {plantingConfig?.showUnits && plantingConfig.filteredGeoJson && (
-          <Source id="filtered-planting-units" type="geojson" data={plantingConfig.filteredGeoJson}>
-            <Layer
-              id="planting-units-layer"
-              type="circle"
-              paint={FILTERED_PLANTING_UNITS_CIRCLE_PAINT}
-            />
-          </Source>
-        )}
-
-        {/* Scenario Planting Units (Vector Tiles) */}
+        {/* Scenario Planting Units (Vector Tiles) — city-wide, unfiltered.
+             Uses a DIFFERENT layer id ('planting-units-vt-layer') from the
+             filtered GeoJSON layer ('planting-units-layer') to prevent ID collision.
+             Only rendered when NO spatial filter (filteredGeoJson) is active. */}
         {plantingConfig?.showUnits && plantingUnitsTiles && !plantingConfig.filteredGeoJson && (
           <Source
             id="planting-units"
@@ -845,11 +846,25 @@ function MapViewComponent({
             maxzoom={20}
           >
             <Layer
-              id="planting-units-layer"
+              id="planting-units-vt-layer"
               type="circle"
               source="planting-units"
               source-layer="planting_units"
               paint={PLANTING_UNITS_CIRCLE_PAINT}
+            />
+          </Source>
+        )}
+
+        {/* Filtered Planting Units (GeoJSON) — spatially filtered results.
+             Only rendered when filteredGeoJson is active. Replaces the city-wide
+             vector-tile source above. Rendered AFTER the study-area fill so
+             filtered points appear on top of the orange polygon overlay. */}
+        {plantingConfig?.showUnits && plantingConfig.filteredGeoJson && (
+          <Source id="filtered-planting-units" type="geojson" data={plantingConfig.filteredGeoJson}>
+            <Layer
+              id="planting-units-layer"
+              type="circle"
+              paint={FILTERED_PLANTING_UNITS_CIRCLE_PAINT}
             />
           </Source>
         )}

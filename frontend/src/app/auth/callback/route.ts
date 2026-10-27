@@ -5,8 +5,9 @@ import { isSafeRedirect } from '@/lib/auth-utils';
 
 function getCanonicalBase(request: NextRequest): string {
   const forwardedProto = request.headers.get('x-forwarded-proto');
-  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host');
-  const isHttps = forwardedProto === 'https' || process.env.NODE_ENV === 'production';
+  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || '';
+  const isLocal = forwardedHost.includes('localhost') || forwardedHost.includes('127.0.0.1');
+  const isHttps = !isLocal && (forwardedProto === 'https' || process.env.NODE_ENV === 'production');
   return `${isHttps ? 'https' : 'http'}://${forwardedHost || request.nextUrl.host}`;
 }
 

@@ -77,6 +77,23 @@ export async function POST(request: Request) {
       return NextResponse.json(result);
     } catch (fetchErr: unknown) {
       clearTimeout(timeout);
+      // Fallback to Supabase PostGIS RPC if upstream python service is unavailable
+      try {
+        const supabase = await createClient();
+        const { data: rpcData, error: rpcError } = await supabase.rpc('filter_planting_units', {
+          geom_json: payload.geometry,
+          scenario_id_input: payload.scenario_id,
+        });
+        if (!rpcError && rpcData) {
+          return NextResponse.json(rpcData);
+        }
+        if (rpcError) {
+          console.error('[PLANTING_FILTER_RPC_ERROR]', rpcError);
+        }
+      } catch (fallbackErr) {
+        console.error('[PLANTING_FILTER_FALLBACK_EXCEPTION]', fallbackErr);
+      }
+
       if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
         console.error('[PLANTING_FILTER_TIMEOUT]');
         return NextResponse.json({ error: 'Analysis timed out' }, { status: 504 });

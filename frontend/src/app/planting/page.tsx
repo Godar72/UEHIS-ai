@@ -225,7 +225,8 @@ function PlantingPageContent() {
     setSelectedUnit(null);
   }, []);
 
-  const handleAnalyzeStudyArea = useCallback(async (geometry: GeoJSON.Geometry | GeoJSON.Feature) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleAnalyzeStudyArea = useCallback(async (geometry: GeoJSON.Geometry | GeoJSON.Feature, _name?: string, _type?: string) => {
     if (!selectedScenarioId) return;
     setStudyAreaGeometry(geometry);
     setIsFiltering(true);
@@ -366,9 +367,23 @@ function PlantingPageContent() {
               className={styles.select}
               value={selectedScenarioId || ''} 
               onChange={e => {
-                setSelectedScenarioId(e.target.value);
+                const newScenarioId = e.target.value;
+                setSelectedScenarioId(newScenarioId);
                 setSelectedUnit(null);
-                setFilteredData(null);
+                // If a spatial filter is active, re-apply it for the new scenario
+                // rather than reverting to the unfiltered city-wide layer.
+                if (studyAreaGeometry && newScenarioId) {
+                  setIsFiltering(true);
+                  uehisClient.planting.filterUnits(newScenarioId, studyAreaGeometry)
+                    .then(data => setFilteredData(data as FilteredData))
+                    .catch(err => {
+                      console.error('Failed to re-filter on scenario change:', err);
+                      setFilteredData(null);
+                    })
+                    .finally(() => setIsFiltering(false));
+                } else {
+                  setFilteredData(null);
+                }
               }}
             >
               {scenarios.map(s => {
